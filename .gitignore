@@ -1,0 +1,50 @@
+# Répertoires exclus du versioning
+frontend/
+context/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# Environnements virtuels Python
+venv/
+env/
+.venv/
+ENV/
+
+# Variables d'environnement
+.env
+.env.local
+.env.*.local
+
+# Caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Build outputs
+build/
+dist/
+*.egg-info/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/

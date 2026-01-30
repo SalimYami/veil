@@ -1,0 +1,29 @@
+# =============================================================================
+# VEIL Backend - Dépendances Python
+# =============================================================================
+# Ce fichier liste toutes les bibliothèques nécessaires pour le backend.
+# Installer avec: pip install -r requirements.txt
+# =============================================================================
+
+# --- Framework Web ---
+fastapi==0.109.0           # Framework API moderne et ultra-rapide (async)
+uvicorn[standard]==0.27.0  # Serveur ASGI pour faire tourner FastAPI
+
+# --- Authentification & Sécurité ---
+python-jose[cryptography]==3.3.0  # Génération et validation de JWT (JSON Web Tokens)
+passlib[bcrypt]==1.7.4            # Hashing sécurisé des mots de passe
+bcrypt==4.1.2                     # Algorithme de hashing (utilisé par passlib)
+
+# --- Upload de fichiers ---
+python-multipart==0.0.6    # Support pour upload de fichiers multipart/form-data
+
+# --- Base de données ---
+aiosqlite==0.19.0          # SQLite async pour FastAPI
+sqlalchemy==2.0.25         # ORM pour interagir avec la base de données
+
+# --- Utilitaires ---
+pydantic==2.5.3            # Validation des données (intégré à FastAPI)
+pydantic-settings==2.1.0   # Configuration via variables d'environnement
+
+# --- CORS (Cross-Origin Resource Sharing) ---
+# Déjà inclus dans FastAPI via starlette
