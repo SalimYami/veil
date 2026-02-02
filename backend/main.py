@@ -19,29 +19,40 @@ Le serveur ne voit JAMAIS les données en clair !
 
 import os
 import uuid
-import shutil
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 from pathlib import Path
 
 # --- FastAPI & Dépendances ---
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, validator
 
 # --- Authentification ---
 from passlib.context import CryptContext
 from jose import JWTError, jwt
+
+# --- Logging Configuration ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger("veil")
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 
 # Clé secrète pour signer les JWT (EN PRODUCTION: utiliser une variable d'env!)
-SECRET_KEY = "veil-super-secret-key-change-this-in-production"
+SECRET_KEY = os.getenv("VEIL_SECRET_KEY", "veil-super-secret-key-change-this-in-production")
 ALGORITHM = "HS256"  # Algorithme de signature JWT
 ACCESS_TOKEN_EXPIRE_MINUTES = 60  # Durée de vie du token
+
+# Limites de sécurité
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
+MAX_FILES_PER_USER = 1000
 
 # Dossier où stocker les fichiers chiffrés
 STORAGE_DIR = Path("./storage")
@@ -76,13 +87,25 @@ class UserRegister(BaseModel):
     L'auth_hash est calculé côté client: SHA256(Argon2(password, email))
     """
     email: EmailStr
-    auth_hash: str  # Hash de la clé d'authentification (côté client)
+    auth_hash: str = Field(..., min_length=64, max_length=128)
+    
+    @validator('auth_hash')
+    def validate_hash(cls, v):
+        if not all(c in '0123456789abcdefABCDEF' for c in v):
+            raise ValueError("auth_hash doit être un hash hexadécimal valide")
+        return v.lower()
 
 
 class UserLogin(BaseModel):
     """Données reçues lors de la connexion."""
     email: EmailStr
-    auth_hash: str
+    auth_hash: str = Field(..., min_length=64, max_length=128)
+    
+    @validator('auth_hash')
+    def validate_hash(cls, v):
+        if not all(c in '0123456789abcdefABCDEF' for c in v):
+            raise ValueError("auth_hash doit être un hash hexadécimal valide")
+        return v.lower()
 
 
 class Token(BaseModel):
@@ -103,9 +126,17 @@ class FileMetadata(BaseModel):
 
 class UploadInit(BaseModel):
     """Données pour initialiser un upload."""
-    file_name: str
-    iv: str  # IV utilisé pour le chiffrement côté client
-    size: int
+    file_name: str = Field(..., min_length=1, max_length=255)
+    iv: str = Field(..., min_length=16)  # IV utilisé pour le chiffrement côté client
+    size: int = Field(..., gt=0, le=MAX_FILE_SIZE)
+    
+    @validator('file_name')
+    def validate_filename(cls, v):
+        # Empêcher les caractères dangereux dans les noms de fichiers
+        forbidden = ['/', '\\', '..', '\0']
+        if any(char in v for char in forbidden):
+            raise ValueError("Nom de fichier invalide")
+        return v
 
 
 # =============================================================================
@@ -154,21 +185,64 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def get_current_user(token: str) -> dict:
+def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     """
-    Extrait l'utilisateur du token JWT.
+    Extrait l'utilisateur du token JWT depuis le header Authorization.
     
     Appelé à chaque requête protégée pour vérifier que l'utilisateur
     est bien authentifié.
+    
+    Format attendu: "Bearer <token>"
     """
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Header Authorization manquant",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    try:
+        scheme, token = authorization.split()
+        if scheme.lower() != "bearer":
+            raise HTTPException(
+                status_code=401,
+                detail="Schéma d'authentification invalide. Utilisez 'Bearer'",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+    except ValueError:
+        raise HTTPException(
+            status_code=401,
+            detail="Format du header Authorization invalide",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise HTTPException(status_code=401, detail="Token invalide")
+            raise HTTPException(
+                status_code=401,
+                detail="Token invalide",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        # Vérifier que l'utilisateur existe toujours
+        user_exists = any(u["id"] == user_id for u in users_db.values())
+        if not user_exists:
+            raise HTTPException(
+                status_code=401,
+                detail="Utilisateur introuvable",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
         return {"user_id": user_id}
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Token invalide ou expiré")
+    except JWTError as e:
+        logger.warning(f"Erreur JWT: {str(e)}")
+        raise HTTPException(
+            status_code=401,
+            detail="Token invalide ou expiré",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
 
 
 # =============================================================================
@@ -182,12 +256,18 @@ app = FastAPI(
 )
 
 # Configuration CORS (permet au frontend de communiquer avec l'API)
+allowed_origins = os.getenv(
+    "VEIL_ALLOWED_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173"
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # URLs du frontend
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],  # GET, POST, PUT, DELETE, etc.
-    allow_headers=["*"],  # Authorization, Content-Type, etc.
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-File-IV", "X-File-Name"],
+    expose_headers=["X-File-IV", "X-File-Name"]
 )
 
 
@@ -210,8 +290,11 @@ async def register(user: UserRegister):
     - Le mot de passe original
     - L'encryptionKey (utilisée pour chiffrer les fichiers)
     """
+    logger.info(f"Tentative d'inscription: {user.email}")
+    
     # Vérifier si l'utilisateur existe déjà
     if user.email in users_db:
+        logger.warning(f"Inscription échouée: email déjà utilisé {user.email}")
         raise HTTPException(status_code=400, detail="Email déjà utilisé")
     
     # Créer l'utilisateur
@@ -234,6 +317,7 @@ async def register(user: UserRegister):
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     
+    logger.info(f"Inscription réussie: {user.email} (ID: {user_id})")
     return Token(access_token=access_token, user_id=user_id)
 
 
@@ -251,14 +335,18 @@ async def login(user: UserLogin):
     ⚠️ Si le mot de passe est incorrect, les clés dérivées seront fausses
     et le fichier ne pourra pas être déchiffré (même si le serveur était compromis!)
     """
+    logger.info(f"Tentative de connexion: {user.email}")
+    
     # Chercher l'utilisateur
     if user.email not in users_db:
+        logger.warning(f"Connexion échouée: utilisateur introuvable {user.email}")
         raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
     
     db_user = users_db[user.email]
     
     # Vérifier l'auth_hash
     if not verify_password(user.auth_hash, db_user["auth_hash"]):
+        logger.warning(f"Connexion échouée: auth_hash invalide pour {user.email}")
         raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
     
     # Créer le token JWT
@@ -267,6 +355,7 @@ async def login(user: UserLogin):
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     
+    logger.info(f"Connexion réussie: {user.email}")
     return Token(access_token=access_token, user_id=db_user["id"])
 
 
@@ -275,7 +364,7 @@ async def login(user: UserLogin):
 # =============================================================================
 
 @app.get("/api/files", response_model=list[FileMetadata])
-async def list_files(token: str):
+async def list_files(user: dict = Depends(get_current_user)):
     """
     📂 LISTE DES FICHIERS
     
@@ -285,17 +374,17 @@ async def list_files(token: str):
     Note: L'IV (vecteur d'initialisation) est nécessaire pour déchiffrer.
     Il est stocké en clair car il n'a pas besoin d'être secret.
     """
-    user = get_current_user(token)
     user_files = files_db.get(user["user_id"], [])
+    logger.info(f"Liste de fichiers demandée: {user['user_id']} ({len(user_files)} fichiers)")
     return user_files
 
 
 @app.post("/api/files/upload")
 async def upload_file(
-    token: str = Form(...),
     file_name: str = Form(...),
-    iv: str = Form(...),  # IV en base64
-    file: UploadFile = File(...)
+    iv: str = Form(...),
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user)
 ):
     """
     📤 UPLOAD D'UN FICHIER CHIFFRÉ
@@ -310,8 +399,16 @@ async def upload_file(
     🔐 Même si un attaquant accède au serveur, il ne peut rien faire
     sans l'encryptionKey qui n'a JAMAIS quitté le navigateur.
     """
-    user = get_current_user(token)
     user_id = user["user_id"]
+    
+    # Vérifier le nombre de fichiers de l'utilisateur
+    user_files = files_db.get(user_id, [])
+    if len(user_files) >= MAX_FILES_PER_USER:
+        logger.warning(f"Limite de fichiers atteinte pour {user_id}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Limite de {MAX_FILES_PER_USER} fichiers atteinte"
+        )
     
     # Générer un ID unique pour le fichier
     file_id = str(uuid.uuid4())
@@ -319,10 +416,24 @@ async def upload_file(
     # Chemin de stockage: storage/<user_id>/<file_id>
     file_path = STORAGE_DIR / user_id / file_id
     
-    # Lire le contenu chiffré et le sauvegarder
+    # Lire le contenu chiffré
     content = await file.read()
-    with open(file_path, "wb") as f:
-        f.write(content)
+    
+    # Vérifier la taille du fichier
+    if len(content) > MAX_FILE_SIZE:
+        logger.warning(f"Fichier trop volumineux: {len(content)} bytes pour {user_id}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Fichier trop volumineux (max: {MAX_FILE_SIZE / 1024 / 1024} MB)"
+        )
+    
+    # Sauvegarder le fichier chiffré
+    try:
+        with open(file_path, "wb") as f:
+            f.write(content)
+    except Exception as e:
+        logger.error(f"Erreur lors de l'écriture du fichier {file_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail="Erreur lors de l'upload")
     
     # Enregistrer les métadonnées
     file_metadata = FileMetadata(
@@ -337,11 +448,12 @@ async def upload_file(
         files_db[user_id] = []
     files_db[user_id].append(file_metadata.model_dump())
     
+    logger.info(f"Fichier uploadé: {file_name} ({len(content)} bytes) pour {user_id}")
     return {"message": "Fichier uploadé avec succès", "file_id": file_id}
 
 
 @app.get("/api/files/{file_id}")
-async def download_file(file_id: str, token: str):
+async def download_file(file_id: str, user: dict = Depends(get_current_user)):
     """
     📥 TÉLÉCHARGEMENT D'UN FICHIER CHIFFRÉ
     
@@ -355,7 +467,6 @@ async def download_file(file_id: str, token: str):
     ⚠️ Si l'utilisateur a oublié son mot de passe, les fichiers sont
     DÉFINITIVEMENT perdus ! C'est le prix de la sécurité zero-knowledge.
     """
-    user = get_current_user(token)
     user_id = user["user_id"]
     
     # Vérifier que le fichier appartient à l'utilisateur
@@ -363,15 +474,18 @@ async def download_file(file_id: str, token: str):
     file_meta = next((f for f in user_files if f["id"] == file_id), None)
     
     if not file_meta:
+        logger.warning(f"Fichier {file_id} non trouvé pour {user_id}")
         raise HTTPException(status_code=404, detail="Fichier non trouvé")
     
     # Chemin du fichier chiffré
     file_path = STORAGE_DIR / user_id / file_id
     
     if not file_path.exists():
+        logger.error(f"Fichier physique {file_id} manquant pour {user_id}")
         raise HTTPException(status_code=404, detail="Fichier non trouvé sur le disque")
     
     # Retourner le fichier chiffré avec ses métadonnées
+    logger.info(f"Téléchargement du fichier {file_id} par {user_id}")
     return FileResponse(
         path=file_path,
         filename=f"{file_meta['name']}.encrypted",
@@ -383,13 +497,12 @@ async def download_file(file_id: str, token: str):
 
 
 @app.delete("/api/files/{file_id}")
-async def delete_file(file_id: str, token: str):
+async def delete_file(file_id: str, user: dict = Depends(get_current_user)):
     """
     🗑️ SUPPRESSION D'UN FICHIER
     
     Supprime le fichier chiffré et ses métadonnées.
     """
-    user = get_current_user(token)
     user_id = user["user_id"]
     
     # Trouver et supprimer les métadonnées
@@ -397,16 +510,22 @@ async def delete_file(file_id: str, token: str):
     file_meta = next((f for f in user_files if f["id"] == file_id), None)
     
     if not file_meta:
+        logger.warning(f"Tentative de suppression d'un fichier inexistant {file_id} par {user_id}")
         raise HTTPException(status_code=404, detail="Fichier non trouvé")
     
     # Supprimer le fichier physique
     file_path = STORAGE_DIR / user_id / file_id
     if file_path.exists():
-        os.remove(file_path)
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            logger.error(f"Erreur lors de la suppression du fichier {file_id}: {str(e)}")
+            raise HTTPException(status_code=500, detail="Erreur lors de la suppression")
     
     # Supprimer les métadonnées
     files_db[user_id] = [f for f in user_files if f["id"] != file_id]
     
+    logger.info(f"Fichier {file_id} supprimé par {user_id}")
     return {"message": "Fichier supprimé"}
 
 
