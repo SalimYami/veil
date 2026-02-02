@@ -20,15 +20,17 @@ Le serveur ne voit JAMAIS les données en clair !
 import os
 import uuid
 import logging
+import time
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 
 # --- FastAPI & Dépendances ---
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Header
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Header, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, EmailStr, Field, validator
+from starlette.middleware.base import BaseHTTPMiddleware
 
 # --- Authentification ---
 from passlib.context import CryptContext
@@ -40,6 +42,37 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger("veil")
+
+
+# =============================================================================
+# MIDDLEWARE DE LOGGING
+# =============================================================================
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """
+    Middleware pour logger toutes les requêtes HTTP avec leur temps de réponse.
+    Utile pour le monitoring et le debugging.
+    """
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        
+        # Logger la requête entrante
+        logger.info(f"→ {request.method} {request.url.path}")
+        
+        # Traiter la requête
+        response = await call_next(request)
+        
+        # Calculer le temps de traitement
+        process_time = time.time() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
+        
+        # Logger la réponse
+        logger.info(
+            f"← {request.method} {request.url.path} "
+            f"[{response.status_code}] {process_time:.3f}s"
+        )
+        
+        return response
 
 # =============================================================================
 # CONFIGURATION
@@ -122,6 +155,26 @@ class FileMetadata(BaseModel):
     iv: str  # Vecteur d'initialisation (nécessaire pour déchiffrer)
     size: int
     created_at: datetime
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+
+class UserStats(BaseModel):
+    """Statistiques d'utilisation de l'utilisateur."""
+    total_files: int
+    total_size_bytes: int
+    total_size_mb: float
+    oldest_file: Optional[datetime] = None
+    newest_file: Optional[datetime] = None
+    average_file_size_mb: float
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None
+        }
 
 
 class UploadInit(BaseModel):
@@ -251,9 +304,38 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
 
 app = FastAPI(
     title="🔒 VEIL API",
-    description="Zero-Knowledge Cloud Storage - Le serveur ne voit jamais vos données !",
-    version="1.0.0"
+    description="""
+    # Zero-Knowledge Cloud Storage
+    
+    VEIL est un système de stockage cloud **zero-knowledge** où le serveur ne voit JAMAIS vos données en clair.
+    
+    ## 🔐 Sécurité
+    
+    - **Chiffrement côté client** : Les fichiers sont chiffrés dans votre navigateur avec AES-256-GCM
+    - **Dérivation de clés** : Utilisation d'Argon2 pour dériver les clés depuis votre mot de passe
+    - **Double hashing** : Votre mot de passe n'est jamais envoyé au serveur
+    - **Authentification JWT** : Tokens signés avec un secret côté serveur
+    
+    ## 🚀 Utilisation
+    
+    1. **Inscription** : Créez un compte avec votre email et mot de passe
+    2. **Upload** : Chiffrez vos fichiers côté client et uploadez-les
+    3. **Download** : Téléchargez vos fichiers chiffrés et déchiffrez-les côté client
+    
+    ⚠️ **Important** : Si vous perdez votre mot de passe, vos fichiers sont DÉFINITIVEMENT perdus !
+    """,
+    version="1.1.0",
+    contact={
+        "name": "VEIL Support",
+        "url": "https://github.com/yourusername/veil",
+    },
+    license_info={
+        "name": "MIT",
+    },
 )
+
+# Ajouter le middleware de logging
+app.add_middleware(RequestLoggingMiddleware)
 
 # Configuration CORS (permet au frontend de communiquer avec l'API)
 allowed_origins = os.getenv(
@@ -267,7 +349,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-File-IV", "X-File-Name"],
-    expose_headers=["X-File-IV", "X-File-Name"]
+    expose_headers=["X-File-IV", "X-File-Name", "X-Process-Time"]
 )
 
 
@@ -275,7 +357,14 @@ app.add_middleware(
 # ROUTES - AUTHENTIFICATION
 # =============================================================================
 
-@app.post("/api/auth/register", response_model=Token)
+@app.post(
+    "/api/auth/register",
+    response_model=Token,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Authentication"],
+    summary="Créer un nouveau compte",
+    description="Inscrivez-vous avec votre email et auth_hash dérivé côté client"
+)
 async def register(user: UserRegister):
     """
     📝 INSCRIPTION
@@ -321,7 +410,13 @@ async def register(user: UserRegister):
     return Token(access_token=access_token, user_id=user_id)
 
 
-@app.post("/api/auth/login", response_model=Token)
+@app.post(
+    "/api/auth/login",
+    response_model=Token,
+    tags=["Authentication"],
+    summary="Se connecter à un compte existant",
+    description="Authentifiez-vous avec votre email et auth_hash"
+)
 async def login(user: UserLogin):
     """
     🔑 CONNEXION
@@ -363,7 +458,13 @@ async def login(user: UserLogin):
 # ROUTES - FICHIERS
 # =============================================================================
 
-@app.get("/api/files", response_model=list[FileMetadata])
+@app.get(
+    "/api/files",
+    response_model=List[FileMetadata],
+    tags=["Files"],
+    summary="Lister tous les fichiers de l'utilisateur",
+    description="Récupérez la liste de tous vos fichiers avec leurs métadonnées"
+)
 async def list_files(user: dict = Depends(get_current_user)):
     """
     📂 LISTE DES FICHIERS
@@ -379,11 +480,62 @@ async def list_files(user: dict = Depends(get_current_user)):
     return user_files
 
 
-@app.post("/api/files/upload")
+@app.get(
+    "/api/stats",
+    response_model=UserStats,
+    tags=["Files"],
+    summary="Obtenir les statistiques d'utilisation",
+    description="Récupérez vos statistiques d'utilisation (nombre de fichiers, espace utilisé, etc.)"
+)
+async def get_stats(user: dict = Depends(get_current_user)):
+    """
+    📊 STATISTIQUES UTILISATEUR
+    
+    Retourne des statistiques sur l'utilisation du stockage :
+    - Nombre total de fichiers
+    - Espace total utilisé
+    - Taille moyenne des fichiers
+    - Date du fichier le plus ancien/récent
+    """
+    user_files = files_db.get(user["user_id"], [])
+    
+    if not user_files:
+        return UserStats(
+            total_files=0,
+            total_size_bytes=0,
+            total_size_mb=0.0,
+            oldest_file=None,
+            newest_file=None,
+            average_file_size_mb=0.0
+        )
+    
+    total_size = sum(f["size"] for f in user_files)
+    dates = [f["created_at"] for f in user_files]
+    
+    stats = UserStats(
+        total_files=len(user_files),
+        total_size_bytes=total_size,
+        total_size_mb=round(total_size / (1024 * 1024), 2),
+        oldest_file=min(dates),
+        newest_file=max(dates),
+        average_file_size_mb=round((total_size / len(user_files)) / (1024 * 1024), 2)
+    )
+    
+    logger.info(f"Statistiques demandées: {user['user_id']} - {stats.total_files} fichiers, {stats.total_size_mb} MB")
+    return stats
+
+
+@app.post(
+    "/api/files/upload",
+    status_code=status.HTTP_201_CREATED,
+    tags=["Files"],
+    summary="Uploader un fichier chiffré",
+    description="Uploadez un fichier déjà chiffré côté client avec AES-256-GCM"
+)
 async def upload_file(
-    file_name: str = Form(...),
-    iv: str = Form(...),
-    file: UploadFile = File(...),
+    file_name: str = Form(..., description="Nom original du fichier"),
+    iv: str = Form(..., description="Vecteur d'initialisation en base64"),
+    file: UploadFile = File(..., description="Fichier chiffré"),
     user: dict = Depends(get_current_user)
 ):
     """
@@ -449,10 +601,21 @@ async def upload_file(
     files_db[user_id].append(file_metadata.model_dump())
     
     logger.info(f"Fichier uploadé: {file_name} ({len(content)} bytes) pour {user_id}")
-    return {"message": "Fichier uploadé avec succès", "file_id": file_id}
+    return {
+        "message": "Fichier uploadé avec succès",
+        "file_id": file_id,
+        "file_name": file_name,
+        "size_bytes": len(content),
+        "size_mb": round(len(content) / (1024 * 1024), 2)
+    }
 
 
-@app.get("/api/files/{file_id}")
+@app.get(
+    "/api/files/{file_id}",
+    tags=["Files"],
+    summary="Télécharger un fichier chiffré",
+    description="Téléchargez un fichier chiffré pour le déchiffrer côté client"
+)
 async def download_file(file_id: str, user: dict = Depends(get_current_user)):
     """
     📥 TÉLÉCHARGEMENT D'UN FICHIER CHIFFRÉ
@@ -496,7 +659,13 @@ async def download_file(file_id: str, user: dict = Depends(get_current_user)):
     )
 
 
-@app.delete("/api/files/{file_id}")
+@app.delete(
+    "/api/files/{file_id}",
+    status_code=status.HTTP_200_OK,
+    tags=["Files"],
+    summary="Supprimer un fichier",
+    description="Supprimez définitivement un fichier chiffré et ses métadonnées"
+)
 async def delete_file(file_id: str, user: dict = Depends(get_current_user)):
     """
     🗑️ SUPPRESSION D'UN FICHIER
@@ -533,7 +702,12 @@ async def delete_file(file_id: str, user: dict = Depends(get_current_user)):
 # ROUTE SANTÉ (Health Check)
 # =============================================================================
 
-@app.get("/health")
+@app.get(
+    "/health",
+    tags=["System"],
+    summary="Vérification de santé de l'API",
+    description="Endpoint pour vérifier que l'API fonctionne correctement"
+)
 async def health_check():
     """
     ❤️ Health Check
@@ -542,7 +716,16 @@ async def health_check():
     """
     return {
         "status": "healthy",
-        "version": "1.0.0",
+        "version": "1.1.0",
+        "timestamp": datetime.utcnow().isoformat(),
+        "total_users": len(users_db),
+        "total_storage_mb": round(
+            sum(
+                sum(f["size"] for f in files)
+                for files in files_db.values()
+            ) / (1024 * 1024),
+            2
+        ),
         "message": "🔒 VEIL API is running - Your secrets are safe!"
     }
 
