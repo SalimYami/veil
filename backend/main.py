@@ -496,17 +496,24 @@ async def login(user: UserLogin):
     """
     logger.info(f"Tentative de connexion: {user.email}")
     
-    # Chercher l'utilisateur
-    if user.email not in users_db:
-        logger.warning(f"Connexion échouée: utilisateur introuvable {user.email}")
-        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+    # 🔐 PROTECTION CONTRE USER ENUMERATION
+    # On vérifie TOUJOURS le hash, même si l'email n'existe pas,
+    # pour avoir un temps de réponse constant (timing attack prevention)
     
-    db_user = users_db[user.email]
+    db_user = users_db.get(user.email)
+    
+    if db_user is None:
+        # Email inexistant : on fait quand même une vérification bcrypt
+        # avec un hash bidon pour garder le même temps de réponse
+        dummy_hash = "$2b$12$dummyhashtopreventtimingattack1234567890123456789012"
+        verify_password(user.auth_hash, dummy_hash)
+        logger.warning(f"Connexion échouée pour {user.email}")
+        raise HTTPException(status_code=401, detail="Identifiants incorrects")
     
     # Vérifier l'auth_hash
     if not verify_password(user.auth_hash, db_user["auth_hash"]):
-        logger.warning(f"Connexion échouée: auth_hash invalide pour {user.email}")
-        raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
+        logger.warning(f"Connexion échouée pour {user.email}")
+        raise HTTPException(status_code=401, detail="Identifiants incorrects")
     
     # Créer les tokens JWT
     access_token = create_access_token(
