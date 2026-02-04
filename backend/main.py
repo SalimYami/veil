@@ -78,10 +78,14 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 # CONFIGURATION
 # =============================================================================
 
-# Clé secrète pour signer les JWT (EN PRODUCTION: utiliser une variable d'env!)
+# Clés secrètes pour signer les JWT (EN PRODUCTION: utiliser des variables d'env!)
 SECRET_KEY = os.getenv("VEIL_SECRET_KEY", "veil-super-secret-key-change-this-in-production")
+REFRESH_SECRET_KEY = os.getenv("VEIL_REFRESH_SECRET_KEY", "veil-refresh-secret-key-change-this-in-production")
 ALGORITHM = "HS256"  # Algorithme de signature JWT
-ACCESS_TOKEN_EXPIRE_MINUTES = 60  # Durée de vie du token
+
+# Durées de vie des tokens
+ACCESS_TOKEN_EXPIRE_MINUTES = 15  # Access token : 15 minutes (courte durée)
+REFRESH_TOKEN_EXPIRE_DAYS = 7     # Refresh token : 7 jours (longue durée)
 
 # Limites de sécurité
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
@@ -103,6 +107,10 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Structure: { email: { "id": uuid, "email": email, "auth_hash": hash } }
 users_db: dict = {}
+
+# Structure: { user_id: [refresh_token_hash, ...] } pour stocker les refresh tokens valides
+# Permet la révocation et le multi-device
+refresh_tokens_db: dict = {}
 
 # Structure: { user_id: [{ "id": uuid, "name": str, "iv": str, "size": int, "created_at": datetime }] }
 files_db: dict = {}
@@ -142,10 +150,23 @@ class UserLogin(BaseModel):
 
 
 class Token(BaseModel):
-    """Token JWT retourné après authentification."""
+    """
+    Tokens JWT retournés après authentification.
+    
+    🔐 SYSTÈME DUAL TOKEN:
+    - access_token: Courte durée (15 min), utilisé pour les requêtes API
+    - refresh_token: Longue durée (7 jours), utilisé pour obtenir de nouveaux access tokens
+    """
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user_id: str
+    expires_in: int  # Durée de vie de l'access token en secondes
+
+
+class RefreshTokenRequest(BaseModel):
+    """Requête pour renouveler un access token."""
+    refresh_token: str
 
 
 class FileMetadata(BaseModel):
@@ -219,23 +240,60 @@ def hash_password(password: str) -> str:
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """
-    Crée un JWT (JSON Web Token).
+    Crée un Access Token JWT (courte durée).
     
     Le JWT contient:
     - sub: l'identifiant de l'utilisateur (user_id)
     - exp: date d'expiration
     - iat: date de création
+    - type: "access" pour distinguer du refresh token
     
     Le token est signé avec notre SECRET_KEY, donc personne ne peut
     le falsifier sans connaître la clé.
     """
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     to_encode.update({
         "exp": expire,
-        "iat": datetime.utcnow()
+        "iat": datetime.utcnow(),
+        "type": "access"
     })
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def create_refresh_token(user_id: str) -> str:
+    """
+    Crée un Refresh Token JWT (longue durée).
+    
+    🔐 DIFFÉRENCES AVEC L'ACCESS TOKEN:
+    - Durée de vie plus longue (7 jours vs 15 minutes)
+    - Signé avec une clé différente (REFRESH_SECRET_KEY)
+    - Contient un token_type "refresh" pour éviter toute confusion
+    - Stocké en base pour pouvoir être révoqué
+    
+    Le refresh token permet d'obtenir de nouveaux access tokens
+    sans redemander le mot de passe à l'utilisateur.
+    """
+    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    to_encode = {
+        "sub": user_id,
+        "exp": expire,
+        "iat": datetime.utcnow(),
+        "type": "refresh"
+    }
+    refresh_token = jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
+    
+    # Stocker le hash du refresh token pour pouvoir le révoquer plus tard
+    token_hash = pwd_context.hash(refresh_token)
+    if user_id not in refresh_tokens_db:
+        refresh_tokens_db[user_id] = []
+    refresh_tokens_db[user_id].append(token_hash)
+    
+    # Limiter à 5 refresh tokens par utilisateur (multi-device)
+    if len(refresh_tokens_db[user_id]) > 5:
+        refresh_tokens_db[user_id] = refresh_tokens_db[user_id][-5:]
+    
+    return refresh_token
 
 
 def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
@@ -400,14 +458,20 @@ async def register(user: UserRegister):
     user_storage = STORAGE_DIR / user_id
     user_storage.mkdir(exist_ok=True)
     
-    # Créer le token JWT
+    # Créer les tokens JWT
     access_token = create_access_token(
         data={"sub": user_id},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
+    refresh_token = create_refresh_token(user_id)
     
     logger.info(f"Inscription réussie: {user.email} (ID: {user_id})")
-    return Token(access_token=access_token, user_id=user_id)
+    return Token(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user_id=user_id,
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60  # En secondes
+    )
 
 
 @app.post(
@@ -444,14 +508,114 @@ async def login(user: UserLogin):
         logger.warning(f"Connexion échouée: auth_hash invalide pour {user.email}")
         raise HTTPException(status_code=401, detail="Email ou mot de passe incorrect")
     
-    # Créer le token JWT
+    # Créer les tokens JWT
     access_token = create_access_token(
         data={"sub": db_user["id"]},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
+    refresh_token = create_refresh_token(db_user["id"])
     
     logger.info(f"Connexion réussie: {user.email}")
-    return Token(access_token=access_token, user_id=db_user["id"])
+    return Token(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user_id=db_user["id"],
+        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60  # En secondes
+    )
+
+
+@app.post(
+    "/api/auth/refresh",
+    response_model=Token,
+    tags=["Authentication"],
+    summary="Renouveler l'access token",
+    description="Utilisez votre refresh token pour obtenir un nouvel access token"
+)
+async def refresh_token(request: RefreshTokenRequest):
+    """
+    🔄 RENOUVELLEMENT DE TOKEN
+    
+    Flux:
+    1. Le client envoie son refresh token
+    2. On vérifie sa validité (signature, expiration, révocation)
+    3. On génère un nouvel access token (et optionnellement un nouveau refresh token)
+    4. On retourne les nouveaux tokens
+    
+    ⚠️ Le refresh token n'est pas renouvelé systématiquement pour éviter
+    une session infinie. L'utilisateur devra se reconnecter après 7 jours.
+    """
+    try:
+        # Décoder le refresh token avec la clé de refresh
+        payload = jwt.decode(
+            request.refresh_token, 
+            REFRESH_SECRET_KEY, 
+            algorithms=[ALGORITHM]
+        )
+        
+        # Vérifier le type de token
+        if payload.get("type") != "refresh":
+            raise HTTPException(status_code=401, detail="Token invalide")
+        
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Token invalide")
+        
+        # Vérifier que le refresh token est dans notre base (non révoqué)
+        user_tokens = refresh_tokens_db.get(user_id, [])
+        token_valid = any(
+            pwd_context.verify(request.refresh_token, stored_hash)
+            for stored_hash in user_tokens
+        )
+        
+        if not token_valid:
+            logger.warning(f"Refresh token révoqué ou invalide pour {user_id}")
+            raise HTTPException(status_code=401, detail="Refresh token révoqué")
+        
+        # Vérifier que l'utilisateur existe toujours
+        user_exists = any(u["id"] == user_id for u in users_db.values())
+        if not user_exists:
+            raise HTTPException(status_code=401, detail="Utilisateur introuvable")
+        
+        # Créer un nouvel access token
+        new_access_token = create_access_token(
+            data={"sub": user_id},
+            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        )
+        
+        logger.info(f"Access token renouvelé pour {user_id}")
+        return Token(
+            access_token=new_access_token,
+            refresh_token=request.refresh_token,  # On garde le même refresh token
+            user_id=user_id,
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        )
+        
+    except JWTError as e:
+        logger.warning(f"Erreur de refresh token: {str(e)}")
+        raise HTTPException(status_code=401, detail="Refresh token invalide ou expiré")
+
+
+@app.post(
+    "/api/auth/logout",
+    tags=["Authentication"],
+    summary="Déconnexion",
+    description="Révoque tous les refresh tokens de l'utilisateur"
+)
+async def logout(user: dict = Depends(get_current_user)):
+    """
+    🚪 DÉCONNEXION
+    
+    Révoque tous les refresh tokens de l'utilisateur.
+    L'utilisateur devra se reconnecter sur tous ses appareils.
+    """
+    user_id = user["user_id"]
+    
+    # Supprimer tous les refresh tokens
+    if user_id in refresh_tokens_db:
+        refresh_tokens_db[user_id] = []
+        logger.info(f"Tous les refresh tokens révoqués pour {user_id}")
+    
+    return {"message": "Déconnexion réussie, tous les tokens ont été révoqués"}
 
 
 # =============================================================================

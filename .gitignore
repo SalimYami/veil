@@ -1,6 +1,5 @@
 # Répertoires exclus du versioning
 frontend/
-context/
 
 # Fichiers système
 .DS_Store
