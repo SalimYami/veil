@@ -1,6 +1,3 @@
-# Répertoires exclus du versioning
-frontend/
-
 # Fichiers système
 .DS_Store
 Thumbs.db
