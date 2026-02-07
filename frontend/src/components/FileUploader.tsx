@@ -11,7 +11,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { useFileStore } from '../store/fileStore';
-import { Upload, FileUp, Loader2 } from 'lucide-react';
+import { Upload, FileUp, Loader2, ShieldCheck } from 'lucide-react';
 
 export function FileUploader() {
     const [isDragging, setIsDragging] = useState(false);
@@ -77,35 +77,36 @@ export function FileUploader() {
 
             {isLoading ? (
                 <div className="upload-progress">
-                    <Loader2 className="spinner" size={48} />
-                    <p>Chiffrement et upload en cours...</p>
+                    <div className="upload-icon">
+                        <Loader2 className="spinner" size={40} />
+                    </div>
+                    <div className="upload-text">
+                        <h3>Chiffrement & Upload</h3>
+                        <p>{uploadProgress < 50 ? 'Chiffrement local AES-256...' : 'Envoi vers le Cloud...'}</p>
+                    </div>
                     <div className="progress-bar">
                         <div
                             className="progress-fill"
                             style={{ width: `${uploadProgress}%` }}
                         />
                     </div>
-                    <span>{uploadProgress}%</span>
+                    <span>{uploadProgress}% complété</span>
                 </div>
             ) : (
                 <div className="upload-content">
-                    {isDragging ? (
-                        <>
-                            <FileUp size={48} />
-                            <p>Déposez le fichier ici</p>
-                        </>
-                    ) : (
-                        <>
-                            <Upload size={48} />
-                            <p>Glissez-déposez un fichier ici</p>
-                            <span>ou cliquez pour sélectionner</span>
-                        </>
-                    )}
+                    <div className="upload-icon">
+                        {isDragging ? <FileUp size={40} /> : <Upload size={40} />}
+                    </div>
+                    <div className="upload-text">
+                        <h3>{isDragging ? 'Déposez pour chiffrer' : 'Glissez-déposez votre fichier'}</h3>
+                        <p>ou cliquez pour explorer</p>
+                    </div>
                 </div>
             )}
 
             <div className="encryption-badge">
-                🔒 Chiffrement AES-256-GCM côté client
+                <ShieldCheck size={12} style={{ marginRight: 4, display: 'inline-block', verticalAlign: 'middle' }} />
+                Protection AES-256-GCM
             </div>
         </div>
     );

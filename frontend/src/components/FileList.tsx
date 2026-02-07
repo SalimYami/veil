@@ -63,9 +63,7 @@ function formatDate(dateStr: string): string {
     return date.toLocaleDateString('fr-FR', {
         day: '2-digit',
         month: 'short',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
+        year: 'numeric'
     });
 }
 
@@ -99,7 +97,7 @@ export function FileList() {
         return (
             <div className="file-list-loading">
                 <Loader2 className="spinner" size={32} />
-                <p>Chargement des fichiers...</p>
+                <p>Chargement du coffre...</p>
             </div>
         );
     }
@@ -109,8 +107,8 @@ export function FileList() {
         return (
             <div className="file-list-empty">
                 <Lock size={48} />
-                <h3>Aucun fichier</h3>
-                <p>Uploadez votre premier fichier - il sera chiffré automatiquement !</p>
+                <h3>Coffre-fort vide</h3>
+                <p>Vos documents sécurisés apparaîtront ici.</p>
             </div>
         );
     }
@@ -128,22 +126,22 @@ export function FileList() {
                     <div key={file.id} className="file-card">
                         <div className="file-icon">
                             {getFileIcon(file.name)}
-                            <div className="encrypted-badge" title="Fichier chiffré">
-                                🔒
-                            </div>
                         </div>
 
                         <div className="file-info">
-                            <h4 title={file.name}>{file.name}</h4>
-                            <span className="file-size">{formatFileSize(file.size)}</span>
-                            <span className="file-date">{formatDate(file.created_at)}</span>
+                            <h4 title={file.name} className="file-name">{file.name}</h4>
+                            <div className="file-meta">
+                                <span className="file-size">{formatFileSize(file.size)}</span>
+                                <span>•</span>
+                                <span className="file-date">{formatDate(file.created_at)}</span>
+                            </div>
                         </div>
 
                         <div className="file-actions">
                             <button
                                 className="action-btn download"
                                 onClick={() => handleDownload(file.id, file.name)}
-                                title="Télécharger (déchiffrer)"
+                                title="Déchiffrer et télécharger"
                                 disabled={isLoading}
                             >
                                 <Download size={18} />
@@ -151,7 +149,7 @@ export function FileList() {
                             <button
                                 className="action-btn delete"
                                 onClick={() => handleDelete(file.id, file.name)}
-                                title="Supprimer"
+                                title="Supprimer définitivement"
                                 disabled={isLoading}
                             >
                                 <Trash2 size={18} />

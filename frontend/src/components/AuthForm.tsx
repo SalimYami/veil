@@ -11,7 +11,7 @@
 
 import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Lock, Mail, Eye, EyeOff, Loader2, Shield, KeyRound } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, Loader2, Shield, KeyRound, ArrowRight } from 'lucide-react';
 
 export function AuthForm() {
     // État local du formulaire
@@ -59,22 +59,24 @@ export function AuthForm() {
 
     return (
         <div className="auth-container">
-            {/* En-tête avec logo */}
+            {/* En-tête avec logo animé */}
             <div className="auth-header">
-                <div className="logo">
-                    <Shield size={48} strokeWidth={1.5} />
+                <div className="logo-wrapper">
+                    <div className="logo-bg"></div>
+                    <div className="logo">
+                        <Shield size={42} strokeWidth={2} />
+                    </div>
                 </div>
                 <h1>VEIL</h1>
-                <p className="tagline">Your secrets, invisible to the cloud</p>
+                <p className="tagline">Zero-Knowledge Cloud Vault</p>
             </div>
 
             {/* Explication Zero-Knowledge */}
             <div className="zk-info">
-                <KeyRound size={20} />
+                <KeyRound size={22} />
                 <div>
-                    <strong>Chiffrement Zero-Knowledge</strong>
-                    <p>Votre mot de passe génère une clé de chiffrement unique.
-                        Elle ne quitte jamais votre navigateur.</p>
+                    <strong>Chiffrement de bout en bout</strong>
+                    <p>Vos clés sont dérivées localement. Le serveur ne voit jamais votre mot de passe ni vos fichiers.</p>
                 </div>
             </div>
 
@@ -100,54 +102,62 @@ export function AuthForm() {
 
                 {/* Champ Email */}
                 <div className="input-group">
-                    <Mail size={20} />
-                    <input
-                        type="email"
-                        placeholder="Email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                    />
+                    <div className="input-wrapper">
+                        <Mail size={18} />
+                        <input
+                            type="email"
+                            placeholder="Email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                        />
+                    </div>
                 </div>
 
                 {/* Champ Mot de passe */}
                 <div className="input-group">
-                    <Lock size={20} />
-                    <input
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="Mot de passe"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        minLength={8}
-                    />
-                    <button
-                        type="button"
-                        className="toggle-password"
-                        onClick={() => setShowPassword(!showPassword)}
-                    >
-                        {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                    </button>
+                    <div className="input-wrapper">
+                        <Lock size={18} />
+                        <input
+                            type={showPassword ? 'text' : 'password'}
+                            placeholder="Mot de passe principal"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            minLength={8}
+                        />
+                        <button
+                            type="button"
+                            className="toggle-password"
+                            onClick={() => setShowPassword(!showPassword)}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)' }}
+                        >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                    </div>
                 </div>
 
                 {/* Confirmation mot de passe (inscription uniquement) */}
                 {!isLogin && (
                     <div className="input-group">
-                        <Lock size={20} />
-                        <input
-                            type={showPassword ? 'text' : 'password'}
-                            placeholder="Confirmer le mot de passe"
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            required
-                        />
+                        <div className="input-wrapper">
+                            <Lock size={18} />
+                            <input
+                                type={showPassword ? 'text' : 'password'}
+                                placeholder="Confirmer le mot de passe"
+                                value={confirmPassword}
+                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                required
+                            />
+                        </div>
                     </div>
                 )}
 
                 {/* Message d'erreur */}
                 {error && (
                     <div className="error-message">
-                        {error}
+                        <Shield size={18} />
+                        <span>{error}</span>
                     </div>
                 )}
 
@@ -156,10 +166,13 @@ export function AuthForm() {
                     {isLoading ? (
                         <>
                             <Loader2 className="spinner" size={20} />
-                            {isLogin ? 'Connexion...' : 'Dérivation des clés...'}
+                            {isLogin ? 'Déchiffrement du coffre...' : 'Création des clés...'}
                         </>
                     ) : (
-                        isLogin ? 'Se connecter' : 'Créer un compte'
+                        <>
+                            {isLogin ? 'Ouvrir le coffre' : 'Créer mon coffre sécurisé'}
+                            <ArrowRight size={18} />
+                        </>
                     )}
                 </button>
             </form>
@@ -167,9 +180,8 @@ export function AuthForm() {
             {/* Avertissement sécurité */}
             <div className="security-warning">
                 <p>
-                    ⚠️ <strong>Important:</strong> Si vous oubliez votre mot de passe,
-                    vos fichiers seront <strong>définitivement perdus</strong>.
-                    Aucune récupération possible.
+                    ⚠️ <strong>Récupération Impossible</strong> <br />
+                    En cas de perte de mot de passe, vos données sont cryptographiquement irrécupérables.
                 </p>
             </div>
         </div>
