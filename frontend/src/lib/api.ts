@@ -77,7 +77,7 @@ export async function login(email: string, authHash: string): Promise<AuthRespon
  */
 export async function listFiles(token: string): Promise<FileMetadata[]> {
     const response = await api.get<FileMetadata[]>('/api/files', {
-        params: { token },
+        headers: { Authorization: `Bearer ${token}` },
     });
     return response.data;
 }
@@ -97,14 +97,14 @@ export async function uploadFile(
     encryptedData: Uint8Array
 ): Promise<{ message: string; file_id: string }> {
     const formData = new FormData();
-    formData.append('token', token);
     formData.append('file_name', fileName);
     formData.append('iv', iv);
-    formData.append('file', new Blob([encryptedData]));
+    formData.append('file', new Blob([new Uint8Array(encryptedData).buffer as ArrayBuffer]));
 
     const response = await api.post('/api/files/upload', formData, {
         headers: {
             'Content-Type': 'multipart/form-data',
+            'Authorization': `Bearer ${token}`,
         },
     });
     return response.data;
@@ -120,7 +120,7 @@ export async function downloadFile(
     fileId: string
 ): Promise<{ data: ArrayBuffer; iv: string; fileName: string }> {
     const response = await api.get(`/api/files/${fileId}`, {
-        params: { token },
+        headers: { Authorization: `Bearer ${token}` },
         responseType: 'arraybuffer',
     });
 
@@ -136,7 +136,7 @@ export async function downloadFile(
  */
 export async function deleteFile(token: string, fileId: string): Promise<void> {
     await api.delete(`/api/files/${fileId}`, {
-        params: { token },
+        headers: { Authorization: `Bearer ${token}` },
     });
 }
 
