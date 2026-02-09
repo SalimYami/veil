@@ -91,6 +91,9 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7     # Refresh token : 7 jours (longue durée)
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
 MAX_FILES_PER_USER = 1000
 
+# Clé Admin (Défaut pour dev, changer via variable d'env en prod)
+ADMIN_KEY = os.getenv("VEIL_ADMIN_KEY", "veil-admin-1234")
+
 # Dossier où stocker les fichiers chiffrés
 STORAGE_DIR = Path("./storage")
 STORAGE_DIR.mkdir(exist_ok=True)
@@ -149,6 +152,11 @@ class UserLogin(BaseModel):
         return v.lower()
 
 
+class AdminPromotion(BaseModel):
+    """Requête de promotion admin."""
+    secret_key: str
+
+
 class Token(BaseModel):
     """
     Tokens JWT retournés après authentification.
@@ -161,6 +169,7 @@ class Token(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     user_id: str
+    role: str = "user"
     expires_in: int  # Durée de vie de l'access token en secondes
 
 
@@ -337,16 +346,16 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        # Vérifier que l'utilisateur existe toujours
-        user_exists = any(u["id"] == user_id for u in users_db.values())
-        if not user_exists:
+        # Récupérer l'utilisateur complet
+        db_user = next((u for u in users_db.values() if u["id"] == user_id), None)
+        if not db_user:
             raise HTTPException(
                 status_code=401,
                 detail="Utilisateur introuvable",
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        return {"user_id": user_id}
+        return db_user
     except JWTError as e:
         logger.warning(f"Erreur JWT: {str(e)}")
         raise HTTPException(
@@ -450,6 +459,7 @@ async def register(user: UserRegister):
         "id": user_id,
         "email": user.email,
         "auth_hash": hash_password(user.auth_hash),  # Double hashing: client + serveur
+        "role": "user",  # Rôle par défaut
         "created_at": datetime.utcnow()
     }
     
@@ -470,6 +480,7 @@ async def register(user: UserRegister):
         access_token=access_token,
         refresh_token=refresh_token,
         user_id=user_id,
+        role=users_db[user.email].get("role", "user"),
         expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60  # En secondes
     )
 
@@ -527,6 +538,7 @@ async def login(user: UserLogin):
         access_token=access_token,
         refresh_token=refresh_token,
         user_id=db_user["id"],
+        role=db_user.get("role", "user"),
         expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60  # En secondes
     )
 
@@ -589,11 +601,15 @@ async def refresh_token(request: RefreshTokenRequest):
             expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         )
         
+        # Récupérer l'utilisateur
+        db_user = next((u for u in users_db.values() if u["id"] == user_id), None)
+        
         logger.info(f"Access token renouvelé pour {user_id}")
         return Token(
             access_token=new_access_token,
             refresh_token=request.refresh_token,  # On garde le même refresh token
             user_id=user_id,
+            role=db_user.get("role", "user") if db_user else "user",
             expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60
         )
         
@@ -623,6 +639,17 @@ async def logout(user: dict = Depends(get_current_user)):
         logger.info(f"Tous les refresh tokens révoqués pour {user_id}")
     
     return {"message": "Déconnexion réussie, tous les tokens ont été révoqués"}
+
+
+async def get_admin_user(current_user: dict = Depends(get_current_user)):
+    """Vérifie si l'utilisateur est administrateur."""
+    if current_user.get("role") != "admin":
+        logger.warning(f"Tentative d'accès admin refusée pour: {current_user.get('email', 'N/A')}")
+        raise HTTPException(
+            status_code=403, 
+            detail="Privilèges administrateur requis"
+        )
+    return current_user
 
 
 # =============================================================================
@@ -902,8 +929,170 @@ async def health_check():
 
 
 # =============================================================================
+# ROUTE PREVIEW FICHIER CHIFFRÉ (User)
+# =============================================================================
+
+@app.get(
+    "/api/files/{file_id}/preview",
+    tags=["Files"],
+    summary="Prévisualiser les données chiffrées",
+    description="Retourne un aperçu des 512 premiers octets chiffrés en hexadécimal"
+)
+async def preview_encrypted_file(file_id: str, user: dict = Depends(get_current_user)):
+    """
+    👁️ PRÉVISUALISATION CHIFFRÉE
+    
+    Permet à l'utilisateur de voir que ses données sont bien chiffrées.
+    Retourne les 512 premiers octets du fichier en hexadécimal.
+    """
+    import hashlib
+    
+    user_id = user["user_id"]
+    
+    # Vérifier que le fichier appartient à l'utilisateur
+    user_files = files_db.get(user_id, [])
+    file_meta = next((f for f in user_files if f["id"] == file_id), None)
+    
+    if not file_meta:
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+    
+    # Chemin du fichier chiffré
+    file_path = STORAGE_DIR / user_id / file_id
+    
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Fichier non trouvé sur le disque")
+    
+    # Lire les 512 premiers octets et calculer le hash
+    with open(file_path, "rb") as f:
+        content = f.read()
+        preview_bytes = content[:512]
+        sha256_hash = hashlib.sha256(content).hexdigest()
+    
+    # Convertir en hex pour affichage
+    hex_preview = preview_bytes.hex()
+    
+    logger.info(f"Preview demandée: {file_id} par {user_id}")
+    
+    return {
+        "file_id": file_id,
+        "file_name": file_meta["name"],
+        "size_bytes": file_meta["size"],
+        "sha256_hash": sha256_hash,
+        "preview_hex": hex_preview,
+        "preview_length": len(preview_bytes),
+        "message": "🔐 Ces données sont chiffrées avec AES-256-GCM - illisibles sans votre clé!"
+    }
+
+
+# =============================================================================
+# ROUTES ADMIN (Monitoring)
+# =============================================================================
+
+@app.get("/api/admin/storage", tags=["Admin"]) # Admin access for system monitoring
+async def admin_storage_view(admin: dict = Depends(get_admin_user)):
+    """
+    🗄️ VUE ADMIN DU STOCKAGE
+    
+    Liste tous les fichiers avec leurs métadonnées et hash.
+    Utilisé pour le monitoring et l'audit.
+    """
+    import hashlib
+    
+    all_files = []
+    
+    for user_id, user_files in files_db.items():
+        for file_meta in user_files:
+            file_path = STORAGE_DIR / user_id / file_meta["id"]
+            
+            # Calculer le hash SHA-256 si le fichier existe
+            sha256_hash = "N/A"
+            if file_path.exists():
+                with open(file_path, "rb") as f:
+                    sha256_hash = hashlib.sha256(f.read()).hexdigest()
+            
+            all_files.append({
+                "user_id": user_id[:8] + "...",  # Tronqué pour la privacy
+                "file_id": file_meta["id"],
+                "file_name": file_meta["name"],
+                "size_bytes": file_meta["size"],
+                "sha256_hash": sha256_hash,
+                "created_at": file_meta["created_at"].isoformat() if isinstance(file_meta["created_at"], datetime) else file_meta["created_at"]
+            })
+    
+    logger.info(f"Admin storage view: {len(all_files)} fichiers")
+    
+    return {
+        "total_files": len(all_files),
+        "files": all_files
+    }
+
+
+@app.get("/api/admin/dashboard", tags=["Admin"])
+async def admin_dashboard(admin: dict = Depends(get_admin_user)):
+    """
+    📊 DASHBOARD ADMIN
+    
+    Retourne toutes les statistiques système pour le monitoring.
+    """
+    total_files = sum(len(files) for files in files_db.values())
+    total_size = sum(
+        sum(f["size"] for f in files)
+        for files in files_db.values()
+    )
+    
+    # Calculer les stats par utilisateur
+    users_stats = []
+    for email, user_data in users_db.items():
+        user_id = user_data["id"]
+        user_files = files_db.get(user_id, [])
+        user_size = sum(f["size"] for f in user_files)
+        users_stats.append({
+            "email": email[:3] + "***",  # Masqué pour privacy
+            "files_count": len(user_files),
+            "storage_mb": round(user_size / (1024 * 1024), 2)
+        })
+    
+    return {
+        "system": {
+            "status": "healthy",
+            "version": "1.1.0",
+            "timestamp": datetime.utcnow().isoformat()
+        },
+        "users": {
+            "total": len(users_db),
+            "details": users_stats
+        },
+        "storage": {
+            "total_files": total_files,
+            "total_size_bytes": total_size,
+            "total_size_mb": round(total_size / (1024 * 1024), 2),
+            "average_file_size_mb": round((total_size / total_files) / (1024 * 1024), 2) if total_files > 0 else 0
+        },
+        "limits": {
+            "max_file_size_mb": MAX_FILE_SIZE / (1024 * 1024),
+            "max_files_per_user": MAX_FILES_PER_USER
+        }
+    }
+
+
+
+# =============================================================================
 # POINT D'ENTRÉE
 # =============================================================================
+
+@app.post("/api/auth/promote")
+async def promote_user(request: AdminPromotion, current_user: dict = Depends(get_current_user)):
+    """Promeut un utilisateur au rang d'administrateur avec une clé secrète."""
+    if request.secret_key != ADMIN_KEY:
+        logger.warning(f"Échec de promotion admin pour {current_user['email']} - Clé invalide")
+        raise HTTPException(status_code=401, detail="Clé de sécurité incorrecte")
+    
+    # Mise à jour du rôle
+    current_user["role"] = "admin"
+    logger.info(f"Utilisateur promu ADMIN: {current_user['email']}")
+    
+    return {"message": "Promotion réussie ! Bienvenue dans le terminal admin.", "role": "admin"}
+
 
 if __name__ == "__main__":
     import uvicorn

@@ -37,6 +37,7 @@ interface AuthState {
     userId: string | null;
     token: string | null;
     email: string | null;
+    role: string | null;
 
     // 🔐 CLÉ DE CHIFFREMENT - NE JAMAIS PERSISTER !
     encryptionKey: Uint8Array | null;
@@ -45,6 +46,7 @@ interface AuthState {
     register: (email: string, password: string) => Promise<void>;
     login: (email: string, password: string) => Promise<void>;
     logout: () => void;
+    promote: (secretKey: string) => Promise<void>;
     clearError: () => void;
 }
 
@@ -60,48 +62,30 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     userId: null,
     token: null,
     email: null,
+    role: null,
     encryptionKey: null,
 
     /**
      * 📝 INSCRIPTION
-     * 
-     * Flux:
-     * 1. Dériver les clés avec Argon2id
-     * 2. Hasher l'authKey
-     * 3. Envoyer email + authHash au serveur
-     * 4. Stocker le token et l'encryptionKey en mémoire
      */
     register: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
 
         try {
-            console.log('📝 Inscription en cours...');
-
-            // Étape 1: Dériver les clés côté client
             const { authKey, encryptionKey } = await deriveKeys(password, email);
-
-            // Étape 2: Hasher l'authKey avant de l'envoyer
             const authHash = await hashAuthKey(authKey);
-
-            // Étape 3: Appeler l'API d'inscription
             const response = await api.register(email, authHash);
 
-            // Étape 4: Stocker l'état authentifié
             set({
                 isAuthenticated: true,
                 isLoading: false,
                 userId: response.user_id,
                 token: response.access_token,
                 email: email,
-                // 🔐 L'encryptionKey reste en RAM - JAMAIS persistée !
+                role: response.role || 'user',
                 encryptionKey: encryptionKey,
             });
-
-            console.log('✅ Inscription réussie !');
-            console.log('🔐 encryptionKey stockée en mémoire (RAM only)');
-
         } catch (error: any) {
-            console.error('❌ Erreur d\'inscription:', error);
             set({
                 isLoading: false,
                 error: error.response?.data?.detail || 'Erreur lors de l\'inscription',
@@ -112,41 +96,25 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     /**
      * 🔑 CONNEXION
-     * 
-     * Même flux que l'inscription:
-     * 1. Re-dériver les clés (le client ne les stocke pas!)
-     * 2. Envoyer authHash pour vérification
-     * 3. Récupérer le token et garder l'encryptionKey
      */
     login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
 
         try {
-            console.log('🔑 Connexion en cours...');
-
-            // Étape 1: Re-dériver les clés
             const { authKey, encryptionKey } = await deriveKeys(password, email);
-
-            // Étape 2: Hasher l'authKey
             const authHash = await hashAuthKey(authKey);
-
-            // Étape 3: Appeler l'API de connexion
             const response = await api.login(email, authHash);
 
-            // Étape 4: Stocker l'état authentifié
             set({
                 isAuthenticated: true,
                 isLoading: false,
                 userId: response.user_id,
                 token: response.access_token,
                 email: email,
+                role: response.role || 'user',
                 encryptionKey: encryptionKey,
             });
-
-            console.log('✅ Connexion réussie !');
-
         } catch (error: any) {
-            console.error('❌ Erreur de connexion:', error);
             set({
                 isLoading: false,
                 error: error.response?.data?.detail || 'Email ou mot de passe incorrect',
@@ -157,22 +125,37 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     /**
      * 🚪 DÉCONNEXION
-     * 
-     * ⚠️ CRITIQUE: On efface l'encryptionKey de la mémoire !
-     * Sans cette clé, les fichiers ne peuvent plus être déchiffrés.
      */
     logout: () => {
-        console.log('🚪 Déconnexion...');
-        console.log('🔐 encryptionKey effacée de la mémoire');
-
         set({
             isAuthenticated: false,
             userId: null,
             token: null,
             email: null,
-            encryptionKey: null, // ⚠️ Clé effacée !
+            role: null,
+            encryptionKey: null,
             error: null,
         });
+    },
+
+    /**
+     * 🚀 PROMOTION ADMIN
+     */
+    promote: async (secretKey: string) => {
+        const { token } = get();
+        if (!token) return;
+
+        set({ isLoading: true, error: null });
+        try {
+            const { role } = await api.promoteToAdmin(token, secretKey);
+            set({ role, isLoading: false });
+        } catch (error: any) {
+            set({
+                isLoading: false,
+                error: error.response?.data?.detail || 'Clé de sécurité invalide',
+            });
+            throw error;
+        }
     },
 
     /**

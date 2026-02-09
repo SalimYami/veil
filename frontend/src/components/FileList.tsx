@@ -1,16 +1,7 @@
-/**
- * =============================================================================
- * VEIL - Liste des Fichiers
- * =============================================================================
- * 
- * Affiche tous les fichiers chiffrés de l'utilisateur.
- * Permet de télécharger (déchiffrer) ou supprimer.
- * 
- * =============================================================================
- */
-
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useFileStore } from '../store/fileStore';
+import { getFilePreview, type FilePreview } from '../lib/api';
+import { useAuthStore } from '../store/authStore';
 import {
     FileText,
     Download,
@@ -20,7 +11,10 @@ import {
     FileVideo,
     FileAudio,
     File,
-    Lock
+    Lock,
+    Eye,
+    X,
+    Shield
 } from 'lucide-react';
 
 /**
@@ -69,6 +63,11 @@ function formatDate(dateStr: string): string {
 
 export function FileList() {
     const { files, isLoading, fetchFiles, downloadFile, deleteFile, error } = useFileStore();
+    const { token } = useAuthStore();
+
+    // État pour la preview
+    const [previewData, setPreviewData] = useState<FilePreview | null>(null);
+    const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
     // Charger les fichiers au montage
     useEffect(() => {
@@ -81,6 +80,23 @@ export function FileList() {
     const handleDownload = async (fileId: string, fileName: string) => {
         console.log(`📥 Téléchargement de ${fileName}...`);
         await downloadFile(fileId);
+    };
+
+    /**
+     * Gestion de la preview chiffrée
+     */
+    const handleShowPreview = async (fileId: string) => {
+        if (!token) return;
+        setIsPreviewLoading(true);
+        try {
+            const data = await getFilePreview(token, fileId);
+            setPreviewData(data);
+        } catch (err) {
+            console.error("Erreur preview:", err);
+            alert("Erreur lors de la récupération de l'aperçu chiffré");
+        } finally {
+            setIsPreviewLoading(false);
+        }
     };
 
     /**
@@ -126,6 +142,9 @@ export function FileList() {
                     <div key={file.id} className="file-card">
                         <div className="file-icon">
                             {getFileIcon(file.name)}
+                            <div className="encrypted-badge" title="Chiffré AES-256-GCM">
+                                <Shield size={10} color="var(--success)" />
+                            </div>
                         </div>
 
                         <div className="file-info">
@@ -138,6 +157,14 @@ export function FileList() {
                         </div>
 
                         <div className="file-actions">
+                            <button
+                                className="action-btn"
+                                onClick={() => handleShowPreview(file.id)}
+                                title="Vérifier le chiffrement (Aperçu hex)"
+                                disabled={isLoading || isPreviewLoading}
+                            >
+                                <Eye size={18} />
+                            </button>
                             <button
                                 className="action-btn download"
                                 onClick={() => handleDownload(file.id, file.name)}
@@ -158,6 +185,47 @@ export function FileList() {
                     </div>
                 ))}
             </div>
+
+            {/* Modal de Preview Chiffrée */}
+            {previewData && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <div className="modal-header">
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <Shield size={20} color="var(--success)" />
+                                Preuve de Chiffrement (Zero-Knowledge)
+                            </h3>
+                            <button className="close-modal" onClick={() => setPreviewData(null)}>
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="modal-body">
+                            <p className="text-secondary" style={{ marginBottom: '15px' }}>
+                                Voici les <strong>512 premiers octets</strong> du fichier <code>{previewData.file_name}</code> tels qu'ils sont stockés sur nos serveurs.
+                                Sans votre mot de passe, ces données sont strictement indéchiffrables.
+                            </p>
+
+                            <div className="preview-hex">
+                                {previewData.preview_hex.match(/.{1,64}/g)?.join('\n')}
+                            </div>
+
+                            <div className="preview-hash">
+                                <strong>SHA-256 du Blob:</strong>
+                                <span className="hash-cell"><code>{previewData.sha256_hash}</code></span>
+                            </div>
+
+                            <div className="zk-info" style={{ marginTop: '24px', marginBottom: 0 }}>
+                                <Lock size={20} />
+                                <div>
+                                    <strong>Architecture Security-First</strong>
+                                    <p>Ce que vous voyez ci-dessus est le résultat de l'algorithme AES-256-GCM exécuté localement dans votre navigateur avant l'envoi.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
+

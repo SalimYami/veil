@@ -27,8 +27,10 @@ const api = axios.create({
 
 export interface AuthResponse {
     access_token: string;
-    token_type: string;
+    refresh_token: string;
     user_id: string;
+    role: string;
+    expires_in: number;
 }
 
 export interface FileMetadata {
@@ -140,4 +142,72 @@ export async function deleteFile(token: string, fileId: string): Promise<void> {
     });
 }
 
+// =============================================================================
+// PREVIEW & ADMIN
+// =============================================================================
+
+export interface FilePreview {
+    file_id: string;
+    file_name: string;
+    size_bytes: number;
+    sha256_hash: string;
+    preview_hex: string;
+    preview_length: number;
+    message: string;
+}
+
+export interface AdminFile {
+    user_id: string;
+    file_id: string;
+    file_name: string;
+    size_bytes: number;
+    sha256_hash: string;
+    created_at: string;
+}
+
+export interface AdminDashboard {
+    system: { status: string; version: string; timestamp: string };
+    users: { total: number; details: Array<{ email: string; files_count: number; storage_mb: number }> };
+    storage: { total_files: number; total_size_bytes: number; total_size_mb: number; average_file_size_mb: number };
+    limits: { max_file_size_mb: number; max_files_per_user: number };
+}
+
+/**
+ * Prévisualise les données chiffrées d'un fichier.
+ */
+export async function getFilePreview(token: string, fileId: string): Promise<FilePreview> {
+    const response = await api.get<FilePreview>(`/api/files/${fileId}/preview`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+}
+
+/**
+ * Récupère la liste de tous les fichiers stockés (admin).
+ */
+export async function getAdminStorage(): Promise<{ total_files: number; files: AdminFile[] }> {
+    const response = await api.get('/api/admin/storage');
+    return response.data;
+}
+
+/**
+ * Récupère le dashboard admin.
+ */
+export async function getAdminDashboard(): Promise<AdminDashboard> {
+    const response = await api.get('/api/admin/dashboard');
+    return response.data;
+}
+
+/**
+ * Promeut l'utilisateur au rang d'admin avec une clé secrète
+ */
+export async function promoteToAdmin(token: string, secretKey: string): Promise<{ role: string }> {
+    const response = await api.post('/api/auth/promote',
+        { secret_key: secretKey },
+        { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return response.data;
+}
+
 export default api;
+
