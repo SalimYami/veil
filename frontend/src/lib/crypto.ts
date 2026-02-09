@@ -16,7 +16,8 @@
  * =============================================================================
  */
 
-// argon2-browser est importé dynamiquement pour éviter les problèmes de WASM avec Vite
+// Import de hash-wasm pour Argon2id (WASM bien packagé, compatible Vite)
+import { argon2id } from 'hash-wasm';
 
 // =============================================================================
 // TYPES
@@ -76,10 +77,7 @@ export interface EncryptedData {
  * @returns Les deux clés dérivées
  */
 export async function deriveKeys(password: string, email: string): Promise<DerivedKeys> {
-  console.log('🔑 Dérivation des clés avec Argon2id...');
-
-  // Import dynamique d'argon2-browser pour éviter les problèmes de WASM avec Vite
-  const argon2 = await import('argon2-browser');
+  console.log('🔑 Dérivation des clés avec Argon2id (hash-wasm)...');
 
   // Étape 1: Créer un salt déterministe à partir de l'email
   // Pourquoi déterministe ? Pour pouvoir re-dériver les mêmes clés à la connexion !
@@ -88,19 +86,22 @@ export async function deriveKeys(password: string, email: string): Promise<Deriv
   const saltHash = await crypto.subtle.digest('SHA-256', emailBytes);
   const salt = new Uint8Array(saltHash).slice(0, 16); // Argon2 veut 16 bytes
 
-  // Étape 2: Dériver les clés avec Argon2id
-  const result = await argon2.hash({
-    pass: password,
+  // Étape 2: Dériver les clés avec Argon2id via hash-wasm
+  // Cette bibliothèque WASM est bien packagée et compatible avec Vite !
+  const hashHex = await argon2id({
+    password: password,
     salt: salt,
-    time: 3,           // Nombre d'itérations
-    mem: 65536,        // 64 MB de mémoire
-    hashLen: 64,       // 512 bits de sortie
-    parallelism: 4,    // 4 threads
-    type: argon2.ArgonType.Argon2id  // Mode hybride (le plus sécurisé)
+    iterations: 3,      // Nombre de passes (time)
+    memorySize: 65536,  // 64 MB de mémoire
+    parallelism: 4,     // 4 threads
+    hashLength: 64,     // 512 bits de sortie
+    outputType: 'hex'   // Sortie en hexadécimal
   });
 
+  // Convertir le hex en Uint8Array
+  const derivedBytes = new Uint8Array(hashHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)));
+
   // Étape 3: Diviser en deux clés de 256 bits chacune
-  const derivedBytes = result.hash;
   const authKey = derivedBytes.slice(0, 32);        // Premiers 256 bits
   const encryptionKey = derivedBytes.slice(32, 64); // Derniers 256 bits
 
