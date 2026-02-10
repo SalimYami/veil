@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useAuthStore } from '../store/authStore';
 import {
     getAdminDashboard,
     getAdminStorage,
@@ -28,17 +29,19 @@ import {
 } from 'lucide-react';
 
 export function AdminDashboard({ onBack }: { onBack: () => void }) {
+    const { token } = useAuthStore();
     const [stats, setStats] = useState<AdminDashboardType | null>(null);
     const [storage, setStorage] = useState<AdminFile[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     const fetchData = async () => {
+        if (!token) return;
         setIsLoading(true);
         try {
             const [statsData, storageData] = await Promise.all([
-                getAdminDashboard(),
-                getAdminStorage()
+                getAdminDashboard(token),
+                getAdminStorage(token)
             ]);
             setStats(statsData);
             setStorage(storageData.files);

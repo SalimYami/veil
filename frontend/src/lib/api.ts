@@ -185,16 +185,20 @@ export async function getFilePreview(token: string, fileId: string): Promise<Fil
 /**
  * Récupère la liste de tous les fichiers stockés (admin).
  */
-export async function getAdminStorage(): Promise<{ total_files: number; files: AdminFile[] }> {
-    const response = await api.get('/api/admin/storage');
+export async function getAdminStorage(token: string): Promise<{ total_files: number; files: AdminFile[] }> {
+    const response = await api.get('/api/admin/storage', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
     return response.data;
 }
 
 /**
  * Récupère le dashboard admin.
  */
-export async function getAdminDashboard(): Promise<AdminDashboard> {
-    const response = await api.get('/api/admin/dashboard');
+export async function getAdminDashboard(token: string): Promise<AdminDashboard> {
+    const response = await api.get('/api/admin/dashboard', {
+        headers: { Authorization: `Bearer ${token}` },
+    });
     return response.data;
 }
 

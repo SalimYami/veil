@@ -1,48 +1,34 @@
-/**
- * =============================================================================
- * VEIL - Formulaire d'Authentification
- * =============================================================================
- * 
- * Composant unifié pour login et inscription.
- * Gère la dérivation de clés et l'affichage des erreurs.
- * 
- * =============================================================================
- */
-
 import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Lock, Mail, Eye, EyeOff, Loader2, Shield, KeyRound, ArrowRight } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, Loader2, Shield, KeyRound, ArrowRight, AlertCircle } from 'lucide-react';
 
 export function AuthForm() {
-    // État local du formulaire
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
 
-    // État global d'authentification
     const { login, register, isLoading, error, clearError } = useAuthStore();
 
-    /**
-     * Soumission du formulaire
-     */
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         clearError();
+        setFormError(null);
 
-        // Validation basique
         if (!email || !password) {
-            return;
-        }
-
-        if (!isLogin && password !== confirmPassword) {
-            alert('Les mots de passe ne correspondent pas');
+            setFormError('Veuillez remplir tous les champs.');
             return;
         }
 
         if (password.length < 8) {
-            alert('Le mot de passe doit contenir au moins 8 caractères');
+            setFormError('Le mot de passe doit contenir au moins 8 caractères.');
+            return;
+        }
+
+        if (!isLogin && password !== confirmPassword) {
+            setFormError('Les mots de passe ne correspondent pas.');
             return;
         }
 
@@ -52,55 +38,67 @@ export function AuthForm() {
             } else {
                 await register(email, password);
             }
-        } catch (err) {
-            // L'erreur est déjà gérée dans le store
+        } catch {
+            // Error handled by store
         }
+    };
+
+    const handleTabSwitch = (loginMode: boolean) => {
+        setIsLogin(loginMode);
+        clearError();
+        setFormError(null);
     };
 
     return (
         <div className="auth-container">
-            {/* En-tête avec logo animé */}
+            {/* Logo & Header */}
             <div className="auth-header">
                 <div className="logo-wrapper">
                     <div className="logo-bg"></div>
                     <div className="logo">
-                        <Shield size={42} strokeWidth={2} />
+                        <Shield size={40} strokeWidth={1.8} />
                     </div>
                 </div>
                 <h1>VEIL</h1>
                 <p className="tagline">Zero-Knowledge Cloud Vault</p>
             </div>
 
-            {/* Explication Zero-Knowledge */}
+            {/* ZK Info */}
             <div className="zk-info">
-                <KeyRound size={22} />
+                <KeyRound size={20} />
                 <div>
                     <strong>Chiffrement de bout en bout</strong>
                     <p>Vos clés sont dérivées localement. Le serveur ne voit jamais votre mot de passe ni vos fichiers.</p>
                 </div>
             </div>
 
-            {/* Formulaire */}
+            {/* Form */}
             <form onSubmit={handleSubmit}>
-                {/* Tabs Login/Register */}
                 <div className="auth-tabs">
                     <button
                         type="button"
                         className={isLogin ? 'active' : ''}
-                        onClick={() => { setIsLogin(true); clearError(); }}
+                        onClick={() => handleTabSwitch(true)}
                     >
                         Connexion
                     </button>
                     <button
                         type="button"
                         className={!isLogin ? 'active' : ''}
-                        onClick={() => { setIsLogin(false); clearError(); }}
+                        onClick={() => handleTabSwitch(false)}
                     >
                         Inscription
                     </button>
                 </div>
 
-                {/* Champ Email */}
+                {/* Inline errors (replaces alert()) */}
+                {(formError || error) && (
+                    <div className="form-error">
+                        <AlertCircle size={16} />
+                        <span>{formError || error}</span>
+                    </div>
+                )}
+
                 <div className="input-group">
                     <div className="input-wrapper">
                         <Mail size={18} />
@@ -114,7 +112,6 @@ export function AuthForm() {
                     </div>
                 </div>
 
-                {/* Champ Mot de passe */}
                 <div className="input-group">
                     <div className="input-wrapper">
                         <Lock size={18} />
@@ -128,16 +125,14 @@ export function AuthForm() {
                         />
                         <button
                             type="button"
-                            className="toggle-password"
                             onClick={() => setShowPassword(!showPassword)}
-                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)' }}
+                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
                         >
                             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                         </button>
                     </div>
                 </div>
 
-                {/* Confirmation mot de passe (inscription uniquement) */}
                 {!isLogin && (
                     <div className="input-group">
                         <div className="input-wrapper">
@@ -153,15 +148,6 @@ export function AuthForm() {
                     </div>
                 )}
 
-                {/* Message d'erreur */}
-                {error && (
-                    <div className="error-message">
-                        <Shield size={18} />
-                        <span>{error}</span>
-                    </div>
-                )}
-
-                {/* Bouton de soumission */}
                 <button type="submit" className="submit-btn" disabled={isLoading}>
                     {isLoading ? (
                         <>
@@ -177,7 +163,6 @@ export function AuthForm() {
                 </button>
             </form>
 
-            {/* Avertissement sécurité */}
             <div className="security-warning">
                 <p>
                     ⚠️ <strong>Récupération Impossible</strong> <br />

@@ -129,8 +129,9 @@ export async function deriveKeys(password: string, email: string): Promise<Deriv
  * @returns Le hash en format hexadécimal
  */
 export async function hashAuthKey(authKey: Uint8Array): Promise<string> {
-  const hashBuffer = await crypto.subtle.digest('SHA-256', authKey);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const keyBuffer = new Uint8Array(authKey).buffer as ArrayBuffer;
+  const hashBuffer = await crypto.subtle.digest('SHA-256', keyBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer as ArrayBuffer));
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
@@ -170,33 +171,36 @@ export async function encryptFile(
   console.log('🔒 Chiffrement du fichier avec AES-256-GCM...');
 
   // Étape 1: Générer un IV aléatoire (12 bytes = 96 bits recommandé pour GCM)
-  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const iv = new Uint8Array(12);
+  crypto.getRandomValues(iv);
+  const ivBuffer = iv.buffer as ArrayBuffer;
 
   // Étape 2: Importer la clé pour WebCrypto
+  const keyBuffer = new Uint8Array(encryptionKey).buffer as ArrayBuffer;
   const cryptoKey = await crypto.subtle.importKey(
-    'raw',                    // Format de la clé
-    encryptionKey,            // La clé brute (256 bits)
-    { name: 'AES-GCM' },      // Algorithme
-    false,                    // Non extractable (sécurité)
-    ['encrypt']               // Utilisation autorisée
+    'raw',
+    keyBuffer,
+    { name: 'AES-GCM' },
+    false,
+    ['encrypt']
   );
 
   // Étape 3: Chiffrer avec AES-GCM
   const ciphertext = await crypto.subtle.encrypt(
     {
       name: 'AES-GCM',
-      iv: iv,
-      tagLength: 128  // Tag d'authentification de 128 bits (16 bytes)
+      iv: ivBuffer,
+      tagLength: 128
     },
     cryptoKey,
     file
   );
 
-  console.log(`✅ Fichier chiffré: ${file.byteLength} bytes → ${ciphertext.byteLength} bytes`);
-  console.log(`   (${ciphertext.byteLength - file.byteLength} bytes de overhead = IV + tag)`);
+  console.log(`✅ Fichier chiffré: ${file.byteLength} bytes → ${(ciphertext as ArrayBuffer).byteLength} bytes`);
+  console.log(`   (${(ciphertext as ArrayBuffer).byteLength - file.byteLength} bytes de overhead = IV + tag)`);
 
   return {
-    ciphertext: new Uint8Array(ciphertext),
+    ciphertext: new Uint8Array(ciphertext as ArrayBuffer),
     iv: iv
   };
 }
@@ -234,28 +238,30 @@ export async function decryptFile(
   console.log('🔓 Déchiffrement du fichier...');
 
   // Étape 1: Importer la clé
+  const keyBuffer = new Uint8Array(encryptionKey).buffer as ArrayBuffer;
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
-    encryptionKey,
+    keyBuffer,
     { name: 'AES-GCM' },
     false,
     ['decrypt']
   );
 
   // Étape 2: Déchiffrer
+  const ivBuffer = new Uint8Array(iv).buffer as ArrayBuffer;
   try {
     const decrypted = await crypto.subtle.decrypt(
       {
         name: 'AES-GCM',
-        iv: iv,
+        iv: ivBuffer,
         tagLength: 128
       },
       cryptoKey,
       ciphertext
     );
 
-    console.log(`✅ Fichier déchiffré: ${ciphertext.byteLength} bytes → ${decrypted.byteLength} bytes`);
-    return decrypted;
+    console.log(`✅ Fichier déchiffré: ${(ciphertext as ArrayBuffer).byteLength} bytes → ${(decrypted as ArrayBuffer).byteLength} bytes`);
+    return decrypted as ArrayBuffer;
 
   } catch (error) {
     // Si le déchiffrement échoue, c'est que les données sont corrompues
