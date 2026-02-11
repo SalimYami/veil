@@ -213,5 +213,50 @@ export async function promoteToAdmin(token: string, secretKey: string): Promise<
     return response.data;
 }
 
+// =============================================================================
+// TAGS, RECHERCHE, ACTIVITÉ
+// =============================================================================
+
+/**
+ * Met à jour les tags d'un fichier.
+ */
+export async function updateFileTags(token: string, fileId: string, tags: string[]): Promise<{ tags: string[] }> {
+    const response = await api.put(`/api/files/${fileId}/tags`,
+        { tags },
+        { headers: { Authorization: `Bearer ${token}` } }
+    );
+    return response.data;
+}
+
+/**
+ * Recherche de fichiers par nom avec suggestions.
+ */
+export async function searchFiles(token: string, query: string): Promise<{ results: FileMetadata[]; query: string }> {
+    const response = await api.get('/api/files/search', {
+        params: { q: query },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+}
+
+export interface ActivityEntry {
+    action: 'upload' | 'download' | 'delete' | 'tag';
+    file_name: string;
+    file_id: string;
+    timestamp: string;
+    details: string;
+}
+
+/**
+ * Récupère l'historique d'activité de l'utilisateur.
+ */
+export async function getActivityHistory(token: string, limit: number = 50): Promise<{ activities: ActivityEntry[] }> {
+    const response = await api.get('/api/activity', {
+        params: { limit },
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
+}
+
 export default api;
 

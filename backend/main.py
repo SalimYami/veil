@@ -115,8 +115,11 @@ users_db: dict = {}
 # Permet la révocation et le multi-device
 refresh_tokens_db: dict = {}
 
-# Structure: { user_id: [{ "id": uuid, "name": str, "iv": str, "size": int, "created_at": datetime }] }
+# Structure: { user_id: [{ "id": uuid, "name": str, "iv": str, "size": int, "created_at": datetime, "tags": [] }] }
 files_db: dict = {}
+
+# Structure: { user_id: [{ "action": str, "file_name": str, "file_id": str, "timestamp": datetime }] }
+activity_log_db: dict = {}
 
 
 # =============================================================================
@@ -185,6 +188,26 @@ class FileMetadata(BaseModel):
     iv: str  # Vecteur d'initialisation (nécessaire pour déchiffrer)
     size: int
     created_at: datetime
+    tags: list = []  # Tags/dossiers pour organiser les fichiers
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+
+
+class TagUpdate(BaseModel):
+    """Requête pour mettre à jour les tags d'un fichier."""
+    tags: list = Field(..., max_length=20)
+
+
+class ActivityEntry(BaseModel):
+    """Entrée dans l'historique d'activité."""
+    action: str  # upload, download, delete, tag
+    file_name: str
+    file_id: str
+    timestamp: datetime
+    details: str = ""
     
     class Config:
         json_encoders = {
@@ -631,7 +654,7 @@ async def logout(user: dict = Depends(get_current_user)):
     Révoque tous les refresh tokens de l'utilisateur.
     L'utilisateur devra se reconnecter sur tous ses appareils.
     """
-    user_id = user["user_id"]
+    user_id = user["id"]
     
     # Supprimer tous les refresh tokens
     if user_id in refresh_tokens_db:
@@ -673,8 +696,8 @@ async def list_files(user: dict = Depends(get_current_user)):
     Note: L'IV (vecteur d'initialisation) est nécessaire pour déchiffrer.
     Il est stocké en clair car il n'a pas besoin d'être secret.
     """
-    user_files = files_db.get(user["user_id"], [])
-    logger.info(f"Liste de fichiers demandée: {user['user_id']} ({len(user_files)} fichiers)")
+    user_files = files_db.get(user["id"], [])
+    logger.info(f"Liste de fichiers demandée: {user['id']} ({len(user_files)} fichiers)")
     return user_files
 
 
@@ -695,7 +718,7 @@ async def get_stats(user: dict = Depends(get_current_user)):
     - Taille moyenne des fichiers
     - Date du fichier le plus ancien/récent
     """
-    user_files = files_db.get(user["user_id"], [])
+    user_files = files_db.get(user["id"], [])
     
     if not user_files:
         return UserStats(
@@ -719,7 +742,7 @@ async def get_stats(user: dict = Depends(get_current_user)):
         average_file_size_mb=round((total_size / len(user_files)) / (1024 * 1024), 2)
     )
     
-    logger.info(f"Statistiques demandées: {user['user_id']} - {stats.total_files} fichiers, {stats.total_size_mb} MB")
+    logger.info(f"Statistiques demandées: {user['id']} - {stats.total_files} fichiers, {stats.total_size_mb} MB")
     return stats
 
 
@@ -749,7 +772,7 @@ async def upload_file(
     🔐 Même si un attaquant accède au serveur, il ne peut rien faire
     sans l'encryptionKey qui n'a JAMAIS quitté le navigateur.
     """
-    user_id = user["user_id"]
+    user_id = user["id"]
     
     # Vérifier le nombre de fichiers de l'utilisateur
     user_files = files_db.get(user_id, [])
@@ -798,6 +821,19 @@ async def upload_file(
         files_db[user_id] = []
     files_db[user_id].append(file_metadata.model_dump())
     
+    # Log activity
+    if user_id not in activity_log_db:
+        activity_log_db[user_id] = []
+    activity_log_db[user_id].insert(0, {
+        "action": "upload",
+        "file_name": file_name,
+        "file_id": file_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "details": f"{round(len(content) / 1024, 1)} KB"
+    })
+    # Keep only last 100 entries
+    activity_log_db[user_id] = activity_log_db[user_id][:100]
+    
     logger.info(f"Fichier uploadé: {file_name} ({len(content)} bytes) pour {user_id}")
     return {
         "message": "Fichier uploadé avec succès",
@@ -806,6 +842,58 @@ async def upload_file(
         "size_bytes": len(content),
         "size_mb": round(len(content) / (1024 * 1024), 2)
     }
+
+
+@app.get(
+    "/api/files/search",
+    tags=["Files"],
+    summary="Rechercher des fichiers",
+    description="Recherche par nom de fichier avec suggestions"
+)
+async def search_files(q: str = "", user: dict = Depends(get_current_user)):
+    """🔍 Recherche de fichiers par nom."""
+    user_id = user["id"]
+    user_files = files_db.get(user_id, [])
+    
+    if not q.strip():
+        return {"results": [], "query": q}
+    
+    query_lower = q.strip().lower()
+    
+    # Score-based matching: exact > starts_with > contains
+    results = []
+    for f in user_files:
+        name_lower = f["name"].lower()
+        score = 0
+        if name_lower == query_lower:
+            score = 100
+        elif name_lower.startswith(query_lower):
+            score = 80
+        elif query_lower in name_lower:
+            score = 60
+        else:
+            # Check if all query chars appear in order (fuzzy)
+            qi = 0
+            for c in name_lower:
+                if qi < len(query_lower) and c == query_lower[qi]:
+                    qi += 1
+            if qi == len(query_lower):
+                score = 30
+        
+        if score > 0:
+            results.append({**f, "_score": score})
+    
+    # Sort by score desc, limit to 10
+    results.sort(key=lambda x: x["_score"], reverse=True)
+    # Remove score from output and serialize dates
+    clean_results = []
+    for r in results[:10]:
+        entry = {k: v for k, v in r.items() if k != "_score"}
+        if isinstance(entry.get("created_at"), datetime):
+            entry["created_at"] = entry["created_at"].isoformat()
+        clean_results.append(entry)
+    
+    return {"results": clean_results, "query": q}
 
 
 @app.get(
@@ -828,7 +916,7 @@ async def download_file(file_id: str, user: dict = Depends(get_current_user)):
     ⚠️ Si l'utilisateur a oublié son mot de passe, les fichiers sont
     DÉFINITIVEMENT perdus ! C'est le prix de la sécurité zero-knowledge.
     """
-    user_id = user["user_id"]
+    user_id = user["id"]
     
     # Vérifier que le fichier appartient à l'utilisateur
     user_files = files_db.get(user_id, [])
@@ -844,6 +932,18 @@ async def download_file(file_id: str, user: dict = Depends(get_current_user)):
     if not file_path.exists():
         logger.error(f"Fichier physique {file_id} manquant pour {user_id}")
         raise HTTPException(status_code=404, detail="Fichier non trouvé sur le disque")
+    
+    # Log activity
+    if user_id not in activity_log_db:
+        activity_log_db[user_id] = []
+    activity_log_db[user_id].insert(0, {
+        "action": "download",
+        "file_name": file_meta["name"],
+        "file_id": file_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "details": ""
+    })
+    activity_log_db[user_id] = activity_log_db[user_id][:100]
     
     # Retourner le fichier chiffré avec ses métadonnées
     logger.info(f"Téléchargement du fichier {file_id} par {user_id}")
@@ -870,7 +970,7 @@ async def delete_file(file_id: str, user: dict = Depends(get_current_user)):
     
     Supprime le fichier chiffré et ses métadonnées.
     """
-    user_id = user["user_id"]
+    user_id = user["id"]
     
     # Trouver et supprimer les métadonnées
     user_files = files_db.get(user_id, [])
@@ -892,8 +992,74 @@ async def delete_file(file_id: str, user: dict = Depends(get_current_user)):
     # Supprimer les métadonnées
     files_db[user_id] = [f for f in user_files if f["id"] != file_id]
     
+    # Log activity
+    if user_id not in activity_log_db:
+        activity_log_db[user_id] = []
+    activity_log_db[user_id].insert(0, {
+        "action": "delete",
+        "file_name": file_meta["name"],
+        "file_id": file_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "details": ""
+    })
+    activity_log_db[user_id] = activity_log_db[user_id][:100]
+    
     logger.info(f"Fichier {file_id} supprimé par {user_id}")
     return {"message": "Fichier supprimé"}
+
+
+# =============================================================================
+# ROUTES - TAGS, RECHERCHE, ACTIVITÉ
+# =============================================================================
+
+@app.put(
+    "/api/files/{file_id}/tags",
+    tags=["Files"],
+    summary="Mettre à jour les tags d'un fichier",
+    description="Ajoute ou modifie les tags/dossiers d'un fichier"
+)
+async def update_file_tags(file_id: str, tag_update: TagUpdate, user: dict = Depends(get_current_user)):
+    """🏷️ Met à jour les tags d'un fichier."""
+    user_id = user["id"]
+    user_files = files_db.get(user_id, [])
+    file_meta = next((f for f in user_files if f["id"] == file_id), None)
+    
+    if not file_meta:
+        raise HTTPException(status_code=404, detail="Fichier non trouvé")
+    
+    # Nettoyer les tags (lowercase, strip, deduplicate)
+    clean_tags = list(set(t.strip().lower() for t in tag_update.tags if t.strip()))
+    file_meta["tags"] = clean_tags
+    
+    # Log activity
+    if user_id not in activity_log_db:
+        activity_log_db[user_id] = []
+    activity_log_db[user_id].insert(0, {
+        "action": "tag",
+        "file_name": file_meta["name"],
+        "file_id": file_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "details": ", ".join(clean_tags) if clean_tags else "tags supprimés"
+    })
+    activity_log_db[user_id] = activity_log_db[user_id][:100]
+    
+    logger.info(f"Tags mis à jour pour {file_id}: {clean_tags}")
+    return {"message": "Tags mis à jour", "tags": clean_tags}
+
+
+
+
+@app.get(
+    "/api/activity",
+    tags=["Files"],
+    summary="Historique d'activité",
+    description="Retourne les dernières actions de l'utilisateur"
+)
+async def get_activity(limit: int = 50, user: dict = Depends(get_current_user)):
+    """📋 Historique d'activité de l'utilisateur."""
+    user_id = user["id"]
+    entries = activity_log_db.get(user_id, [])
+    return {"activities": entries[:limit]}
 
 
 # =============================================================================
@@ -947,7 +1113,7 @@ async def preview_encrypted_file(file_id: str, user: dict = Depends(get_current_
     """
     import hashlib
     
-    user_id = user["user_id"]
+    user_id = user["id"]
     
     # Vérifier que le fichier appartient à l'utilisateur
     user_files = files_db.get(user_id, [])

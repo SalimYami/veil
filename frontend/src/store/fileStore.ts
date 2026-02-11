@@ -1,11 +1,6 @@
 /**
- * =============================================================================
  * VEIL - Store des Fichiers (Zustand)
- * =============================================================================
- * 
- * Gère la liste des fichiers et les opérations d'upload/download.
- * 
- * =============================================================================
+ * Gère fichiers, tags, multi-upload, recherche
  */
 
 import { create } from 'zustand';
@@ -17,6 +12,7 @@ import {
     base64ToArrayBuffer
 } from '../lib/crypto';
 import { useAuthStore } from './authStore';
+import type { ActivityEntry } from '../lib/api';
 
 // =============================================================================
 // TYPES
@@ -28,6 +24,14 @@ export interface VeilFile {
     iv: string;
     size: number;
     created_at: string;
+    tags: string[];
+}
+
+interface UploadQueueItem {
+    file: File;
+    status: 'waiting' | 'encrypting' | 'uploading' | 'done' | 'error';
+    progress: number;
+    error?: string;
 }
 
 interface FileState {
@@ -36,11 +40,38 @@ interface FileState {
     uploadProgress: number;
     error: string | null;
 
+    // Multi-upload
+    uploadQueue: UploadQueueItem[];
+    isUploading: boolean;
+
+    // Tags
+    allTags: string[];
+    activeTag: string | null;
+
+    // Search
+    searchQuery: string;
+    searchResults: VeilFile[];
+    isSearching: boolean;
+
+    // Activity
+    activities: ActivityEntry[];
+
+    // Toast
+    toasts: Array<{ id: string; message: string; type: 'success' | 'error' | 'info' }>;
+
     // Actions
     fetchFiles: () => Promise<void>;
     uploadFile: (file: File) => Promise<void>;
+    uploadFiles: (files: File[]) => Promise<void>;
     downloadFile: (fileId: string) => Promise<void>;
     deleteFile: (fileId: string) => Promise<void>;
+    updateFileTags: (fileId: string, tags: string[]) => Promise<void>;
+    setActiveTag: (tag: string | null) => void;
+    searchFiles: (query: string) => Promise<void>;
+    setSearchQuery: (query: string) => void;
+    fetchActivity: () => Promise<void>;
+    addToast: (message: string, type: 'success' | 'error' | 'info') => void;
+    removeToast: (id: string) => void;
     clearError: () => void;
 }
 
@@ -53,6 +84,15 @@ export const useFileStore = create<FileState>((set, get) => ({
     isLoading: false,
     uploadProgress: 0,
     error: null,
+    uploadQueue: [],
+    isUploading: false,
+    allTags: [],
+    activeTag: null,
+    searchQuery: '',
+    searchResults: [],
+    isSearching: false,
+    activities: [],
+    toasts: [],
 
     /**
      * 📂 Récupère la liste des fichiers
@@ -65,7 +105,9 @@ export const useFileStore = create<FileState>((set, get) => ({
 
         try {
             const files = await api.listFiles(token);
-            set({ files, isLoading: false });
+            // Extract all unique tags
+            const allTags = [...new Set(files.flatMap((f: VeilFile) => f.tags || []))];
+            set({ files, allTags, isLoading: false });
         } catch (error: any) {
             set({
                 isLoading: false,
@@ -75,16 +117,16 @@ export const useFileStore = create<FileState>((set, get) => ({
     },
 
     /**
-     * 📤 UPLOAD D'UN FICHIER
-     * 
-     * Flux Zero-Knowledge:
-     * 1. Lire le fichier comme ArrayBuffer
-     * 2. Chiffrer avec AES-256-GCM (côté client!)
-     * 3. Envoyer le blob chiffré au serveur
-     * 
-     * ⚠️ Le serveur reçoit uniquement des données chiffrées illisibles !
+     * 📤 UPLOAD D'UN FICHIER (single)
      */
     uploadFile: async (file: File) => {
+        await get().uploadFiles([file]);
+    },
+
+    /**
+     * 📤 MULTI-UPLOAD
+     */
+    uploadFiles: async (files: File[]) => {
         const { token, encryptionKey } = useAuthStore.getState();
 
         if (!token || !encryptionKey) {
@@ -92,51 +134,71 @@ export const useFileStore = create<FileState>((set, get) => ({
             return;
         }
 
-        set({ isLoading: true, uploadProgress: 0, error: null });
+        const queue: UploadQueueItem[] = files.map(f => ({
+            file: f,
+            status: 'waiting' as const,
+            progress: 0,
+        }));
 
-        try {
-            console.log(`📤 Upload: ${file.name} (${file.size} bytes)`);
+        set({ uploadQueue: queue, isUploading: true, error: null });
 
-            // Étape 1: Lire le fichier
-            const fileBuffer = await file.arrayBuffer();
-            set({ uploadProgress: 20 });
+        for (let i = 0; i < queue.length; i++) {
+            try {
+                // Update status to encrypting
+                queue[i].status = 'encrypting';
+                queue[i].progress = 20;
+                set({ uploadQueue: [...queue], uploadProgress: Math.round(((i) / queue.length) * 100) });
 
-            // Étape 2: Chiffrer côté client
-            console.log('🔒 Chiffrement en cours...');
-            const { ciphertext, iv } = await encryptFile(fileBuffer, encryptionKey);
-            set({ uploadProgress: 60 });
+                const fileBuffer = await queue[i].file.arrayBuffer();
+                const { ciphertext, iv } = await encryptFile(fileBuffer, encryptionKey);
+                const ivBase64 = arrayBufferToBase64(iv);
 
-            // Étape 3: Convertir l'IV en Base64 pour le transport
-            const ivBase64 = arrayBufferToBase64(iv);
+                // Update status to uploading
+                queue[i].status = 'uploading';
+                queue[i].progress = 60;
+                set({ uploadQueue: [...queue] });
 
-            // Étape 4: Envoyer au serveur
-            console.log('☁️ Upload vers le serveur...');
-            await api.uploadFile(token, file.name, ivBase64, ciphertext);
-            set({ uploadProgress: 100 });
+                await api.uploadFile(token, queue[i].file.name, ivBase64, ciphertext);
 
-            console.log('✅ Upload terminé !');
+                // Done
+                queue[i].status = 'done';
+                queue[i].progress = 100;
+                set({ uploadQueue: [...queue], uploadProgress: Math.round(((i + 1) / queue.length) * 100) });
 
-            // Rafraîchir la liste des fichiers
-            await get().fetchFiles();
-            set({ isLoading: false, uploadProgress: 0 });
-
-        } catch (error: any) {
-            console.error('❌ Erreur d\'upload:', error);
-            set({
-                isLoading: false,
-                uploadProgress: 0,
-                error: error.response?.data?.detail || 'Erreur lors de l\'upload',
-            });
+            } catch (error: any) {
+                queue[i].status = 'error';
+                queue[i].error = error.response?.data?.detail || 'Erreur';
+                set({ uploadQueue: [...queue] });
+            }
         }
+
+        // Refresh
+        await get().fetchFiles();
+        await get().fetchActivity();
+
+        const successCount = queue.filter(q => q.status === 'done').length;
+        if (successCount > 0) {
+            get().addToast(
+                successCount === 1
+                    ? 'Fichier chiffré et uploadé avec succès'
+                    : `${successCount} fichiers chiffrés et uploadés`,
+                'success'
+            );
+        }
+
+        const errorCount = queue.filter(q => q.status === 'error').length;
+        if (errorCount > 0) {
+            get().addToast(`${errorCount} fichier(s) en erreur`, 'error');
+        }
+
+        // Clear queue after delay
+        setTimeout(() => {
+            set({ uploadQueue: [], isUploading: false, uploadProgress: 0 });
+        }, 2000);
     },
 
     /**
-     * 📥 TÉLÉCHARGEMENT D'UN FICHIER
-     * 
-     * Flux Zero-Knowledge:
-     * 1. Télécharger le blob chiffré depuis le serveur
-     * 2. Déchiffrer avec l'encryptionKey (côté client!)
-     * 3. Proposer le téléchargement du fichier original
+     * 📥 TÉLÉCHARGEMENT
      */
     downloadFile: async (fileId: string) => {
         const { token, encryptionKey } = useAuthStore.getState();
@@ -149,18 +211,10 @@ export const useFileStore = create<FileState>((set, get) => ({
         set({ isLoading: true, error: null });
 
         try {
-            // Étape 1: Télécharger le blob chiffré
-            console.log('📥 Téléchargement du fichier chiffré...');
             const { data, iv, fileName } = await api.downloadFile(token, fileId);
-
-            // Étape 2: Convertir l'IV de Base64
             const ivBytes = base64ToArrayBuffer(iv);
-
-            // Étape 3: Déchiffrer côté client
-            console.log('🔓 Déchiffrement en cours...');
             const decrypted = await decryptFile(data, ivBytes, encryptionKey);
 
-            // Étape 4: Créer un lien de téléchargement
             const blob = new Blob([decrypted]);
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -169,20 +223,21 @@ export const useFileStore = create<FileState>((set, get) => ({
             a.click();
             URL.revokeObjectURL(url);
 
-            console.log('✅ Fichier déchiffré et téléchargé !');
+            get().addToast('Fichier déchiffré et téléchargé', 'success');
             set({ isLoading: false });
+            await get().fetchActivity();
 
         } catch (error: any) {
-            console.error('❌ Erreur de téléchargement:', error);
             set({
                 isLoading: false,
                 error: error.message || 'Erreur lors du téléchargement',
             });
+            get().addToast('Erreur lors du téléchargement', 'error');
         }
     },
 
     /**
-     * 🗑️ Suppression d'un fichier
+     * 🗑️ Suppression
      */
     deleteFile: async (fileId: string) => {
         const { token } = useAuthStore.getState();
@@ -193,13 +248,93 @@ export const useFileStore = create<FileState>((set, get) => ({
         try {
             await api.deleteFile(token, fileId);
             await get().fetchFiles();
+            await get().fetchActivity();
+            get().addToast('Fichier supprimé définitivement', 'info');
             set({ isLoading: false });
         } catch (error: any) {
             set({
                 isLoading: false,
                 error: error.response?.data?.detail || 'Erreur lors de la suppression',
             });
+            get().addToast('Erreur lors de la suppression', 'error');
         }
+    },
+
+    /**
+     * 🏷️ Update tags
+     */
+    updateFileTags: async (fileId: string, tags: string[]) => {
+        const { token } = useAuthStore.getState();
+        if (!token) return;
+
+        try {
+            await api.updateFileTags(token, fileId, tags);
+            await get().fetchFiles();
+            await get().fetchActivity();
+            get().addToast('Tags mis à jour', 'success');
+        } catch (error: any) {
+            get().addToast('Erreur lors de la mise à jour des tags', 'error');
+        }
+    },
+
+    setActiveTag: (tag: string | null) => {
+        set({ activeTag: tag });
+    },
+
+    /**
+     * 🔍 Search
+     */
+    searchFiles: async (query: string) => {
+        const { token } = useAuthStore.getState();
+        if (!token) return;
+
+        if (!query.trim()) {
+            set({ searchResults: [], isSearching: false });
+            return;
+        }
+
+        set({ isSearching: true });
+
+        try {
+            const { results } = await api.searchFiles(token, query);
+            set({ searchResults: results as VeilFile[], isSearching: false });
+        } catch {
+            set({ isSearching: false });
+        }
+    },
+
+    setSearchQuery: (query: string) => {
+        set({ searchQuery: query });
+    },
+
+    /**
+     * 📋 Fetch activity
+     */
+    fetchActivity: async () => {
+        const { token } = useAuthStore.getState();
+        if (!token) return;
+
+        try {
+            const { activities } = await api.getActivityHistory(token, 30);
+            set({ activities });
+        } catch {
+            // Silent fail
+        }
+    },
+
+    /**
+     * Toast system
+     */
+    addToast: (message: string, type: 'success' | 'error' | 'info') => {
+        const id = crypto.randomUUID();
+        set(state => ({ toasts: [...state.toasts, { id, message, type }] }));
+        setTimeout(() => {
+            get().removeToast(id);
+        }, 3500);
+    },
+
+    removeToast: (id: string) => {
+        set(state => ({ toasts: state.toasts.filter(t => t.id !== id) }));
     },
 
     clearError: () => set({ error: null }),
