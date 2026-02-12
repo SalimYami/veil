@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Lock, Mail, Eye, EyeOff, Loader2, Shield, KeyRound, ArrowRight, AlertCircle } from 'lucide-react';
+import { Loader2, Shield, KeyRound, ArrowRight, AlertCircle } from 'lucide-react';
+import { ModernInput } from './ModernInput';
 
 export function AuthForm() {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [showPassword, setShowPassword] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
 
     const { login, register, isLoading, error, clearError } = useAuthStore();
@@ -91,7 +91,7 @@ export function AuthForm() {
                     </button>
                 </div>
 
-                {/* Inline errors (replaces alert()) */}
+                {/* Inline errors */}
                 {(formError || error) && (
                     <div className="form-error">
                         <AlertCircle size={16} />
@@ -99,53 +99,33 @@ export function AuthForm() {
                     </div>
                 )}
 
-                <div className="input-group">
-                    <div className="input-wrapper">
-                        <Mail size={18} />
-                        <input
-                            type="email"
-                            placeholder="Email"
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            required
-                        />
-                    </div>
-                </div>
+                <ModernInput
+                    label="Email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                />
 
-                <div className="input-group">
-                    <div className="input-wrapper">
-                        <Lock size={18} />
-                        <input
-                            type={showPassword ? 'text' : 'password'}
-                            placeholder="Mot de passe principal"
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            required
-                            minLength={8}
-                        />
-                        <button
-                            type="button"
-                            onClick={() => setShowPassword(!showPassword)}
-                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
-                        >
-                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                        </button>
-                    </div>
-                </div>
+                <ModernInput
+                    label="Mot de passe principal"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    showPasswordToggle
+                    required
+                    minLength={8}
+                />
 
                 {!isLogin && (
-                    <div className="input-group">
-                        <div className="input-wrapper">
-                            <Lock size={18} />
-                            <input
-                                type={showPassword ? 'text' : 'password'}
-                                placeholder="Confirmer le mot de passe"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                required
-                            />
-                        </div>
-                    </div>
+                    <ModernInput
+                        label="Confirmer le mot de passe"
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        showPasswordToggle
+                        required
+                    />
                 )}
 
                 <button type="submit" className="submit-btn" disabled={isLoading}>
