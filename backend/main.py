@@ -1,6 +1,6 @@
 """
 =============================================================================
-VEIL Backend - API Zero-Knowledge Storage
+VEIL Backend - API Zero-Knowledge Storage with PostgreSQL + MinIO
 =============================================================================
 
 🔒 ARCHITECTURE ZERO-KNOWLEDGE:
@@ -12,29 +12,41 @@ Le serveur ne voit JAMAIS les données en clair !
    - authKey: envoyée au serveur (hashée) pour s'authentifier
    - encryptionKey: JAMAIS envoyée, reste dans le navigateur
 3. Les fichiers sont chiffrés côté client AVANT l'upload
-4. Le serveur stocke uniquement des blobs chiffrés (illisibles sans la clé)
+4. Le serveur génère des presigned URLs pour upload/download direct vers MinIO
+5. MinIO stocke uniquement des blobs chiffrés (illisibles sans la clé)
+
+🗄️ PERSISTENCE:
+---------------
+- PostgreSQL: métadonnées uniquement (users, files, tokens, activity)
+- MinIO: blobs chiffrés uniquement
+- Backend: JAMAIS de clés de chiffrement, JAMAIS de données en clair
 
 =============================================================================
 """
 
 import os
-import uuid
 import logging
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional, List
-from pathlib import Path
 
-# --- FastAPI & Dépendances ---
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Header, Request, status
+# --- FastAPI & Dependencies ---
+from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field, validator
 from starlette.middleware.base import BaseHTTPMiddleware
-
-# --- Authentification ---
-from passlib.context import CryptContext
 from jose import JWTError, jwt
+
+# --- Database & Services ---
+from database.connection import init_db, get_db, health_check
+from database.models import User, File
+from repositories.user_repository import UserRepository
+from repositories.file_repository import FileRepository
+from repositories.activity_repository import ActivityRepository
+from storage.minio_client import MinIOClient
+from services.auth_service import AuthService
+from services.file_service import FileService
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -49,24 +61,16 @@ logger = logging.getLogger("veil")
 # =============================================================================
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """
-    Middleware pour logger toutes les requêtes HTTP avec leur temps de réponse.
-    Utile pour le monitoring et le debugging.
-    """
+    """Middleware pour logger toutes les requêtes HTTP."""
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
-        
-        # Logger la requête entrante
         logger.info(f"→ {request.method} {request.url.path}")
         
-        # Traiter la requête
         response = await call_next(request)
         
-        # Calculer le temps de traitement
         process_time = time.time() - start_time
         response.headers["X-Process-Time"] = str(process_time)
         
-        # Logger la réponse
         logger.info(
             f"← {request.method} {request.url.path} "
             f"[{response.status_code}] {process_time:.3f}s"
@@ -74,121 +78,151 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         
         return response
 
+
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 
-# Clés secrètes pour signer les JWT (EN PRODUCTION: utiliser des variables d'env!)
+# JWT Configuration
 SECRET_KEY = os.getenv("VEIL_SECRET_KEY", "veil-super-secret-key-change-this-in-production")
 REFRESH_SECRET_KEY = os.getenv("VEIL_REFRESH_SECRET_KEY", "veil-refresh-secret-key-change-this-in-production")
-ALGORITHM = "HS256"  # Algorithme de signature JWT
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 15
+REFRESH_TOKEN_EXPIRE_DAYS = 7
 
-# Durées de vie des tokens
-ACCESS_TOKEN_EXPIRE_MINUTES = 15  # Access token : 15 minutes (courte durée)
-REFRESH_TOKEN_EXPIRE_DAYS = 7     # Refresh token : 7 jours (longue durée)
-
-# Limites de sécurité
-MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
-MAX_FILES_PER_USER = 1000
-
-# Clé Admin (Défaut pour dev, changer via variable d'env en prod)
+# Admin Configuration
 ADMIN_KEY = os.getenv("VEIL_ADMIN_KEY", "veil-admin-1234")
 
-# Dossier où stocker les fichiers chiffrés
-STORAGE_DIR = Path("./storage")
-STORAGE_DIR.mkdir(exist_ok=True)
+# Database Configuration
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://veil:veil@localhost:5432/veil")
 
-# Configuration du hashing (bcrypt)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# MinIO Configuration
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
+MINIO_BUCKET = os.getenv("MINIO_BUCKET", "veil-storage")
+MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
-# =============================================================================
-# BASE DE DONNÉES (Simplifiée - En mémoire pour le MVP)
-# =============================================================================
-
-# 💡 En production, on utiliserait SQLite/PostgreSQL/DynamoDB
-# Pour le MVP, on utilise des dictionnaires en mémoire
-
-# Structure: { email: { "id": uuid, "email": email, "auth_hash": hash } }
-users_db: dict = {}
-
-# Structure: { user_id: [refresh_token_hash, ...] } pour stocker les refresh tokens valides
-# Permet la révocation et le multi-device
-refresh_tokens_db: dict = {}
-
-# Structure: { user_id: [{ "id": uuid, "name": str, "iv": str, "size": int, "created_at": datetime, "tags": [] }] }
-files_db: dict = {}
-
-# Structure: { user_id: [{ "action": str, "file_name": str, "file_id": str, "timestamp": datetime }] }
-activity_log_db: dict = {}
+# Limits
+MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(100 * 1024 * 1024)))  # 100 MB
+MAX_FILES_PER_USER = int(os.getenv("MAX_FILES_PER_USER", "1000"))
 
 
 # =============================================================================
-# MODÈLES PYDANTIC (Validation des données)
+# INITIALIZE SERVICES
+# =============================================================================
+
+# Initialize database
+logger.info("Initializing database connection...")
+init_db(DATABASE_URL)
+
+# Initialize MinIO
+logger.info("Initializing MinIO client...")
+minio_client = MinIOClient(
+    endpoint=MINIO_ENDPOINT,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=MINIO_SECURE
+)
+minio_client.initialize_bucket(MINIO_BUCKET)
+
+# Initialize services
+auth_service = AuthService(
+    secret_key=SECRET_KEY,
+    refresh_secret_key=REFRESH_SECRET_KEY,
+    algorithm=ALGORITHM,
+    access_token_expire_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
+    refresh_token_expire_days=REFRESH_TOKEN_EXPIRE_DAYS
+)
+
+file_service = FileService(
+    minio_client=minio_client,
+    bucket_name=MINIO_BUCKET,
+    max_files_per_user=MAX_FILES_PER_USER
+)
+
+logger.info("✅ All services initialized successfully")
+
+
+# =============================================================================
+# PYDANTIC MODELS
 # =============================================================================
 
 class UserRegister(BaseModel):
-    """
-    Données reçues lors de l'inscription.
-    
-    🔐 IMPORTANT: On reçoit 'auth_hash', PAS le mot de passe en clair !
-    L'auth_hash est calculé côté client: SHA256(Argon2(password, email))
-    """
+    """User registration request."""
     email: EmailStr
     auth_hash: str = Field(..., min_length=64, max_length=128)
     
     @validator('auth_hash')
     def validate_hash(cls, v):
         if not all(c in '0123456789abcdefABCDEF' for c in v):
-            raise ValueError("auth_hash doit être un hash hexadécimal valide")
+            raise ValueError("auth_hash must be a valid hexadecimal hash")
         return v.lower()
 
 
 class UserLogin(BaseModel):
-    """Données reçues lors de la connexion."""
+    """User login request."""
     email: EmailStr
     auth_hash: str = Field(..., min_length=64, max_length=128)
     
     @validator('auth_hash')
     def validate_hash(cls, v):
         if not all(c in '0123456789abcdefABCDEF' for c in v):
-            raise ValueError("auth_hash doit être un hash hexadécimal valide")
+            raise ValueError("auth_hash must be a valid hexadecimal hash")
         return v.lower()
 
 
 class AdminPromotion(BaseModel):
-    """Requête de promotion admin."""
+    """Admin promotion request."""
     secret_key: str
 
 
 class Token(BaseModel):
-    """
-    Tokens JWT retournés après authentification.
-    
-    🔐 SYSTÈME DUAL TOKEN:
-    - access_token: Courte durée (15 min), utilisé pour les requêtes API
-    - refresh_token: Longue durée (7 jours), utilisé pour obtenir de nouveaux access tokens
-    """
+    """JWT token response."""
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
     user_id: str
     role: str = "user"
-    expires_in: int  # Durée de vie de l'access token en secondes
+    expires_in: int
 
 
 class RefreshTokenRequest(BaseModel):
-    """Requête pour renouveler un access token."""
+    """Refresh token request."""
     refresh_token: str
 
 
+class UploadInitRequest(BaseModel):
+    """Upload initialization request."""
+    file_name: str = Field(..., min_length=1, max_length=255)
+    iv: str = Field(..., min_length=16)
+    auth_tag: str = Field(..., min_length=16)
+    file_size: int = Field(..., gt=0, le=MAX_FILE_SIZE)
+    mime_type: Optional[str] = None
+    
+    @validator('file_name')
+    def validate_filename(cls, v):
+        forbidden = ['/', '\\', '..', '\0']
+        if any(char in v for char in forbidden):
+            raise ValueError("Invalid filename")
+        return v
+
+
+class UploadConfirmRequest(BaseModel):
+    """Upload confirmation request."""
+    file_id: str
+
+
 class FileMetadata(BaseModel):
-    """Métadonnées d'un fichier (sans le contenu chiffré)."""
+    """File metadata response."""
     id: str
     name: str
-    iv: str  # Vecteur d'initialisation (nécessaire pour déchiffrer)
+    iv: str
+    auth_tag: str
     size: int
+    mime_type: Optional[str]
+    tags: list = []
     created_at: datetime
-    tags: list = []  # Tags/dossiers pour organiser les fichiers
     
     class Config:
         json_encoders = {
@@ -197,15 +231,15 @@ class FileMetadata(BaseModel):
 
 
 class TagUpdate(BaseModel):
-    """Requête pour mettre à jour les tags d'un fichier."""
+    """Tag update request."""
     tags: list = Field(..., max_length=20)
 
 
 class ActivityEntry(BaseModel):
-    """Entrée dans l'historique d'activité."""
-    action: str  # upload, download, delete, tag
+    """Activity log entry."""
+    action: str
     file_name: str
-    file_id: str
+    file_id: Optional[str]
     timestamp: datetime
     details: str = ""
     
@@ -216,7 +250,7 @@ class ActivityEntry(BaseModel):
 
 
 class UserStats(BaseModel):
-    """Statistiques d'utilisation de l'utilisateur."""
+    """User statistics."""
     total_files: int
     total_size_bytes: int
     total_size_mb: float
@@ -230,117 +264,16 @@ class UserStats(BaseModel):
         }
 
 
-class UploadInit(BaseModel):
-    """Données pour initialiser un upload."""
-    file_name: str = Field(..., min_length=1, max_length=255)
-    iv: str = Field(..., min_length=16)  # IV utilisé pour le chiffrement côté client
-    size: int = Field(..., gt=0, le=MAX_FILE_SIZE)
-    
-    @validator('file_name')
-    def validate_filename(cls, v):
-        # Empêcher les caractères dangereux dans les noms de fichiers
-        forbidden = ['/', '\\', '..', '\0']
-        if any(char in v for char in forbidden):
-            raise ValueError("Nom de fichier invalide")
-        return v
-
-
 # =============================================================================
-# FONCTIONS UTILITAIRES
+# AUTHENTICATION DEPENDENCY
 # =============================================================================
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Vérifie si un hash correspond au mot de passe.
-    
-    ⚠️ Dans VEIL, on ne vérifie pas un mot de passe mais un auth_hash !
-    Le client envoie: SHA256(authKey)
-    On compare avec le hash stocké en base.
-    """
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def hash_password(password: str) -> str:
-    """
-    Hash un mot de passe/auth_hash avec bcrypt.
-    
-    bcrypt est résistant aux attaques par force brute car il est lent
-    et utilise un salt automatique.
-    """
-    return pwd_context.hash(password)
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    Crée un Access Token JWT (courte durée).
-    
-    Le JWT contient:
-    - sub: l'identifiant de l'utilisateur (user_id)
-    - exp: date d'expiration
-    - iat: date de création
-    - type: "access" pour distinguer du refresh token
-    
-    Le token est signé avec notre SECRET_KEY, donc personne ne peut
-    le falsifier sans connaître la clé.
-    """
-    to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "type": "access"
-    })
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-
-def create_refresh_token(user_id: str) -> str:
-    """
-    Crée un Refresh Token JWT (longue durée).
-    
-    🔐 DIFFÉRENCES AVEC L'ACCESS TOKEN:
-    - Durée de vie plus longue (7 jours vs 15 minutes)
-    - Signé avec une clé différente (REFRESH_SECRET_KEY)
-    - Contient un token_type "refresh" pour éviter toute confusion
-    - Stocké en base pour pouvoir être révoqué
-    
-    Le refresh token permet d'obtenir de nouveaux access tokens
-    sans redemander le mot de passe à l'utilisateur.
-    """
-    expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode = {
-        "sub": user_id,
-        "exp": expire,
-        "iat": datetime.utcnow(),
-        "type": "refresh"
-    }
-    refresh_token = jwt.encode(to_encode, REFRESH_SECRET_KEY, algorithm=ALGORITHM)
-    
-    # Stocker le hash du refresh token pour pouvoir le révoquer plus tard
-    token_hash = pwd_context.hash(refresh_token)
-    if user_id not in refresh_tokens_db:
-        refresh_tokens_db[user_id] = []
-    refresh_tokens_db[user_id].append(token_hash)
-    
-    # Limiter à 5 refresh tokens par utilisateur (multi-device)
-    if len(refresh_tokens_db[user_id]) > 5:
-        refresh_tokens_db[user_id] = refresh_tokens_db[user_id][-5:]
-    
-    return refresh_token
-
 
 def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    """
-    Extrait l'utilisateur du token JWT depuis le header Authorization.
-    
-    Appelé à chaque requête protégée pour vérifier que l'utilisateur
-    est bien authentifié.
-    
-    Format attendu: "Bearer <token>"
-    """
+    """Extract user from JWT token."""
     if not authorization:
         raise HTTPException(
             status_code=401,
-            detail="Header Authorization manquant",
+            detail="Authorization header missing",
             headers={"WWW-Authenticate": "Bearer"}
         )
     
@@ -349,13 +282,13 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
         if scheme.lower() != "bearer":
             raise HTTPException(
                 status_code=401,
-                detail="Schéma d'authentification invalide. Utilisez 'Bearer'",
+                detail="Invalid authentication scheme",
                 headers={"WWW-Authenticate": "Bearer"}
             )
     except ValueError:
         raise HTTPException(
             status_code=401,
-            detail="Format du header Authorization invalide",
+            detail="Invalid Authorization header format",
             headers={"WWW-Authenticate": "Bearer"}
         )
     
@@ -365,56 +298,76 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
         if user_id is None:
             raise HTTPException(
                 status_code=401,
-                detail="Token invalide",
+                detail="Invalid token",
                 headers={"WWW-Authenticate": "Bearer"}
             )
         
-        # Récupérer l'utilisateur complet
-        db_user = next((u for u in users_db.values() if u["id"] == user_id), None)
-        if not db_user:
-            raise HTTPException(
-                status_code=401,
-                detail="Utilisateur introuvable",
-                headers={"WWW-Authenticate": "Bearer"}
-            )
-        
-        return db_user
+        # Get user from database
+        with get_db() as db:
+            user = UserRepository.get_user_by_id(db, user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="User not found",
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
+            
+            return {
+                "id": str(user.id),
+                "email": user.email,
+                "role": user.role
+            }
+    
     except JWTError as e:
-        logger.warning(f"Erreur JWT: {str(e)}")
+        logger.warning(f"JWT error: {str(e)}")
         raise HTTPException(
             status_code=401,
-            detail="Token invalide ou expiré",
+            detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"}
         )
 
 
+def get_admin_user(current_user: dict = Depends(get_current_user)):
+    """Verify user is admin."""
+    if current_user.get("role") != "admin":
+        logger.warning(f"Admin access denied for: {current_user.get('email', 'N/A')}")
+        raise HTTPException(
+            status_code=403,
+            detail="Admin privileges required"
+        )
+    return current_user
+
+
 # =============================================================================
-# APPLICATION FASTAPI
+# FASTAPI APPLICATION
 # =============================================================================
 
 app = FastAPI(
     title="🔒 VEIL API",
     description="""
-    # Zero-Knowledge Cloud Storage
+    # Zero-Knowledge Cloud Storage with PostgreSQL + MinIO
     
     VEIL est un système de stockage cloud **zero-knowledge** où le serveur ne voit JAMAIS vos données en clair.
     
     ## 🔐 Sécurité
     
-    - **Chiffrement côté client** : Les fichiers sont chiffrés dans votre navigateur avec AES-256-GCM
-    - **Dérivation de clés** : Utilisation d'Argon2 pour dériver les clés depuis votre mot de passe
-    - **Double hashing** : Votre mot de passe n'est jamais envoyé au serveur
-    - **Authentification JWT** : Tokens signés avec un secret côté serveur
+    - **Chiffrement côté client** : AES-256-GCM dans le navigateur
+    - **Dérivation de clés** : Argon2 pour dériver authKey + encryptionKey
+    - **Presigned URLs** : Upload/download direct vers MinIO (bypass backend)
+    - **PostgreSQL** : Métadonnées uniquement (NO plaintext, NO keys)
+    - **MinIO** : Blobs chiffrés uniquement
     
-    ## 🚀 Utilisation
+    ## 🚀 Flux d'Upload
     
-    1. **Inscription** : Créez un compte avec votre email et mot de passe
-    2. **Upload** : Chiffrez vos fichiers côté client et uploadez-les
-    3. **Download** : Téléchargez vos fichiers chiffrés et déchiffrez-les côté client
+    1. Frontend chiffre le fichier
+    2. Frontend demande une presigned URL au backend
+    3. Backend génère l'URL et stocke les métadonnées (status='pending')
+    4. Frontend upload directement vers MinIO
+    5. Frontend confirme l'upload au backend (status='uploaded')
     
     ⚠️ **Important** : Si vous perdez votre mot de passe, vos fichiers sont DÉFINITIVEMENT perdus !
     """,
-    version="1.1.0",
+    version="2.0.0",
     contact={
         "name": "VEIL Support",
         "url": "https://github.com/yourusername/veil",
@@ -424,10 +377,10 @@ app = FastAPI(
     },
 )
 
-# Ajouter le middleware de logging
+# Add middleware
 app.add_middleware(RequestLoggingMiddleware)
 
-# Configuration CORS (permet au frontend de communiquer avec l'API)
+# CORS configuration
 allowed_origins = os.getenv(
     "VEIL_ALLOWED_ORIGINS",
     "http://localhost:5173,http://127.0.0.1:5173"
@@ -438,838 +391,385 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-File-IV", "X-File-Name"],
-    expose_headers=["X-File-IV", "X-File-Name", "X-Process-Time"]
+    allow_headers=["Content-Type", "Authorization"],
+    expose_headers=["X-Process-Time"]
 )
 
 
 # =============================================================================
-# ROUTES - AUTHENTIFICATION
+# HEALTH CHECK
+# =============================================================================
+
+@app.get("/health", tags=["Health"])
+async def health():
+    """Health check endpoint."""
+    db_healthy = health_check()
+    
+    return {
+        "status": "healthy" if db_healthy else "unhealthy",
+        "database": "connected" if db_healthy else "disconnected",
+        "version": "2.0.0"
+    }
+
+
+# =============================================================================
+# AUTHENTICATION ROUTES
 # =============================================================================
 
 @app.post(
     "/api/auth/register",
     response_model=Token,
     status_code=status.HTTP_201_CREATED,
-    tags=["Authentication"],
-    summary="Créer un nouveau compte",
-    description="Inscrivez-vous avec votre email et auth_hash dérivé côté client"
+    tags=["Authentication"]
 )
 async def register(user: UserRegister):
-    """
-    📝 INSCRIPTION
-    
-    Flux:
-    1. Le client dérive les clés: Argon2(password, email) → authKey + encryptionKey
-    2. Le client envoie: { email, auth_hash: SHA256(authKey) }
-    3. On hash l'auth_hash avec bcrypt et on le stocke
-    4. On retourne un JWT pour authentifier les prochaines requêtes
-    
-    🔐 Le serveur ne connaît JAMAIS:
-    - Le mot de passe original
-    - L'encryptionKey (utilisée pour chiffrer les fichiers)
-    """
-    logger.info(f"Tentative d'inscription: {user.email}")
-    
-    # Vérifier si l'utilisateur existe déjà
-    if user.email in users_db:
-        logger.warning(f"Inscription échouée: email déjà utilisé {user.email}")
-        raise HTTPException(status_code=400, detail="Email déjà utilisé")
-    
-    # Créer l'utilisateur
-    user_id = str(uuid.uuid4())
-    users_db[user.email] = {
-        "id": user_id,
-        "email": user.email,
-        "auth_hash": hash_password(user.auth_hash),  # Double hashing: client + serveur
-        "role": "user",  # Rôle par défaut
-        "created_at": datetime.utcnow()
-    }
-    
-    # Initialiser le stockage de fichiers pour cet utilisateur
-    files_db[user_id] = []
-    user_storage = STORAGE_DIR / user_id
-    user_storage.mkdir(exist_ok=True)
-    
-    # Créer les tokens JWT
-    access_token = create_access_token(
-        data={"sub": user_id},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    refresh_token = create_refresh_token(user_id)
-    
-    logger.info(f"Inscription réussie: {user.email} (ID: {user_id})")
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user_id=user_id,
-        role=users_db[user.email].get("role", "user"),
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60  # En secondes
-    )
+    """Register a new user."""
+    try:
+        token_data = auth_service.register_user(user.email, user.auth_hash)
+        return Token(**token_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @app.post(
     "/api/auth/login",
     response_model=Token,
-    tags=["Authentication"],
-    summary="Se connecter à un compte existant",
-    description="Authentifiez-vous avec votre email et auth_hash"
+    tags=["Authentication"]
 )
 async def login(user: UserLogin):
-    """
-    🔑 CONNEXION
-    
-    Flux similaire à l'inscription:
-    1. Le client re-dérive les clés depuis le mot de passe
-    2. Le client envoie auth_hash
-    3. On vérifie que le hash correspond
-    4. On retourne un JWT si OK
-    
-    ⚠️ Si le mot de passe est incorrect, les clés dérivées seront fausses
-    et le fichier ne pourra pas être déchiffré (même si le serveur était compromis!)
-    """
-    logger.info(f"Tentative de connexion: {user.email}")
-    
-    # 🔐 PROTECTION CONTRE USER ENUMERATION
-    # On vérifie TOUJOURS le hash, même si l'email n'existe pas,
-    # pour avoir un temps de réponse constant (timing attack prevention)
-    
-    db_user = users_db.get(user.email)
-    
-    if db_user is None:
-        # Email inexistant : on fait quand même une vérification bcrypt
-        # avec un hash bidon pour garder le même temps de réponse
-        dummy_hash = "$2b$12$dummyhashtopreventtimingattack1234567890123456789012"
-        verify_password(user.auth_hash, dummy_hash)
-        logger.warning(f"Connexion échouée pour {user.email}")
-        raise HTTPException(status_code=401, detail="Identifiants incorrects")
-    
-    # Vérifier l'auth_hash
-    if not verify_password(user.auth_hash, db_user["auth_hash"]):
-        logger.warning(f"Connexion échouée pour {user.email}")
-        raise HTTPException(status_code=401, detail="Identifiants incorrects")
-    
-    # Créer les tokens JWT
-    access_token = create_access_token(
-        data={"sub": db_user["id"]},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
-    refresh_token = create_refresh_token(db_user["id"])
-    
-    logger.info(f"Connexion réussie: {user.email}")
-    return Token(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        user_id=db_user["id"],
-        role=db_user.get("role", "user"),
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60  # En secondes
-    )
+    """Login user."""
+    try:
+        token_data = auth_service.login_user(user.email, user.auth_hash)
+        return Token(**token_data)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 
 @app.post(
     "/api/auth/refresh",
     response_model=Token,
-    tags=["Authentication"],
-    summary="Renouveler l'access token",
-    description="Utilisez votre refresh token pour obtenir un nouvel access token"
+    tags=["Authentication"]
 )
 async def refresh_token(request: RefreshTokenRequest):
-    """
-    🔄 RENOUVELLEMENT DE TOKEN
-    
-    Flux:
-    1. Le client envoie son refresh token
-    2. On vérifie sa validité (signature, expiration, révocation)
-    3. On génère un nouvel access token (et optionnellement un nouveau refresh token)
-    4. On retourne les nouveaux tokens
-    
-    ⚠️ Le refresh token n'est pas renouvelé systématiquement pour éviter
-    une session infinie. L'utilisateur devra se reconnecter après 7 jours.
-    """
+    """Refresh access token."""
     try:
-        # Décoder le refresh token avec la clé de refresh
-        payload = jwt.decode(
-            request.refresh_token, 
-            REFRESH_SECRET_KEY, 
-            algorithms=[ALGORITHM]
-        )
-        
-        # Vérifier le type de token
-        if payload.get("type") != "refresh":
-            raise HTTPException(status_code=401, detail="Token invalide")
-        
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Token invalide")
-        
-        # Vérifier que le refresh token est dans notre base (non révoqué)
-        user_tokens = refresh_tokens_db.get(user_id, [])
-        token_valid = any(
-            pwd_context.verify(request.refresh_token, stored_hash)
-            for stored_hash in user_tokens
-        )
-        
-        if not token_valid:
-            logger.warning(f"Refresh token révoqué ou invalide pour {user_id}")
-            raise HTTPException(status_code=401, detail="Refresh token révoqué")
-        
-        # Vérifier que l'utilisateur existe toujours
-        user_exists = any(u["id"] == user_id for u in users_db.values())
-        if not user_exists:
-            raise HTTPException(status_code=401, detail="Utilisateur introuvable")
-        
-        # Créer un nouvel access token
-        new_access_token = create_access_token(
-            data={"sub": user_id},
-            expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        )
-        
-        # Récupérer l'utilisateur
-        db_user = next((u for u in users_db.values() if u["id"] == user_id), None)
-        
-        logger.info(f"Access token renouvelé pour {user_id}")
-        return Token(
-            access_token=new_access_token,
-            refresh_token=request.refresh_token,  # On garde le même refresh token
-            user_id=user_id,
-            role=db_user.get("role", "user") if db_user else "user",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60
-        )
-        
-    except JWTError as e:
-        logger.warning(f"Erreur de refresh token: {str(e)}")
-        raise HTTPException(status_code=401, detail="Refresh token invalide ou expiré")
+        token_data = auth_service.refresh_access_token(request.refresh_token)
+        return Token(**token_data)
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=str(e))
 
 
 @app.post(
     "/api/auth/logout",
-    tags=["Authentication"],
-    summary="Déconnexion",
-    description="Révoque tous les refresh tokens de l'utilisateur"
+    tags=["Authentication"]
 )
 async def logout(user: dict = Depends(get_current_user)):
-    """
-    🚪 DÉCONNEXION
-    
-    Révoque tous les refresh tokens de l'utilisateur.
-    L'utilisateur devra se reconnecter sur tous ses appareils.
-    """
-    user_id = user["id"]
-    
-    # Supprimer tous les refresh tokens
-    if user_id in refresh_tokens_db:
-        refresh_tokens_db[user_id] = []
-        logger.info(f"Tous les refresh tokens révoqués pour {user_id}")
-    
-    return {"message": "Déconnexion réussie, tous les tokens ont été révoqués"}
+    """Logout user (revoke all refresh tokens)."""
+    auth_service.logout_user(user["id"])
+    return {"message": "Logged out successfully"}
 
 
-async def get_admin_user(current_user: dict = Depends(get_current_user)):
-    """Vérifie si l'utilisateur est administrateur."""
-    if current_user.get("role") != "admin":
-        logger.warning(f"Tentative d'accès admin refusée pour: {current_user.get('email', 'N/A')}")
-        raise HTTPException(
-            status_code=403, 
-            detail="Privilèges administrateur requis"
-        )
-    return current_user
+@app.post(
+    "/api/auth/promote-admin",
+    tags=["Authentication"]
+)
+async def promote_admin(
+    request: AdminPromotion,
+    user: dict = Depends(get_current_user)
+):
+    """Promote user to admin."""
+    try:
+        success = auth_service.promote_to_admin(user["id"], request.secret_key, ADMIN_KEY)
+        if success:
+            return {"message": "Promoted to admin successfully", "role": "admin"}
+        else:
+            raise HTTPException(status_code=404, detail="User not found")
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
 
 
 # =============================================================================
-# ROUTES - FICHIERS
+# FILE ROUTES
 # =============================================================================
 
 @app.get(
     "/api/files",
     response_model=List[FileMetadata],
-    tags=["Files"],
-    summary="Lister tous les fichiers de l'utilisateur",
-    description="Récupérez la liste de tous vos fichiers avec leurs métadonnées"
+    tags=["Files"]
 )
 async def list_files(user: dict = Depends(get_current_user)):
+    """List all user files."""
+    with get_db() as db:
+        files = FileRepository.get_user_files(db, user["id"])
+        return [
+            FileMetadata(
+                id=str(f.id),
+                name=f.file_name,
+                iv=f.iv,
+                auth_tag=f.auth_tag,
+                size=f.file_size,
+                mime_type=f.mime_type,
+                tags=f.tags or [],
+                created_at=f.created_at
+            )
+            for f in files
+        ]
+
+
+@app.post(
+    "/api/files/upload-init",
+    status_code=status.HTTP_201_CREATED,
+    tags=["Files"]
+)
+async def upload_init(
+    request: UploadInitRequest,
+    user: dict = Depends(get_current_user)
+):
     """
-    📂 LISTE DES FICHIERS
+    Initialize file upload (generate presigned URL).
     
-    Retourne les métadonnées des fichiers de l'utilisateur.
-    Le contenu des fichiers n'est PAS retourné ici (trop lourd).
-    
-    Note: L'IV (vecteur d'initialisation) est nécessaire pour déchiffrer.
-    Il est stocké en clair car il n'a pas besoin d'être secret.
+    Returns presigned URL for direct upload to MinIO.
     """
-    user_files = files_db.get(user["id"], [])
-    logger.info(f"Liste de fichiers demandée: {user['id']} ({len(user_files)} fichiers)")
-    return user_files
+    try:
+        result = file_service.initiate_upload(
+            user_id=user["id"],
+            file_name=request.file_name,
+            iv=request.iv,
+            auth_tag=request.auth_tag,
+            file_size=request.file_size,
+            mime_type=request.mime_type
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post(
+    "/api/files/upload-confirm",
+    tags=["Files"]
+)
+async def upload_confirm(
+    request: UploadConfirmRequest,
+    user: dict = Depends(get_current_user)
+):
+    """Confirm file upload after client uploads to MinIO."""
+    try:
+        file_service.confirm_upload(user["id"], request.file_id)
+        return {"message": "Upload confirmed successfully", "file_id": request.file_id}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get(
+    "/api/files/{file_id}",
+    tags=["Files"]
+)
+async def download_file(
+    file_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Get download URL for file.
+    
+    Returns presigned URL for direct download from MinIO.
+    """
+    try:
+        result = file_service.get_download_url(user["id"], file_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.delete(
+    "/api/files/{file_id}",
+    tags=["Files"]
+)
+async def delete_file(
+    file_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """Delete file."""
+    try:
+        file_service.delete_file(user["id"], file_id)
+        return {"message": "File deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.put(
+    "/api/files/{file_id}/tags",
+    tags=["Files"]
+)
+async def update_tags(
+    file_id: str,
+    request: TagUpdate,
+    user: dict = Depends(get_current_user)
+):
+    """Update file tags."""
+    try:
+        file_service.update_file_tags(user["id"], file_id, request.tags)
+        return {"message": "Tags updated successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@app.get(
+    "/api/files/search",
+    tags=["Files"]
+)
+async def search_files(
+    q: str = "",
+    user: dict = Depends(get_current_user)
+):
+    """Search files by name."""
+    with get_db() as db:
+        files = FileRepository.search_files(db, user["id"], q, limit=10)
+        return {
+            "results": [
+                {
+                    "id": str(f.id),
+                    "name": f.file_name,
+                    "iv": f.iv,
+                    "auth_tag": f.auth_tag,
+                    "size": f.file_size,
+                    "mime_type": f.mime_type,
+                    "tags": f.tags or [],
+                    "created_at": f.created_at.isoformat()
+                }
+                for f in files
+            ],
+            "query": q
+        }
 
 
 @app.get(
     "/api/stats",
     response_model=UserStats,
-    tags=["Files"],
-    summary="Obtenir les statistiques d'utilisation",
-    description="Récupérez vos statistiques d'utilisation (nombre de fichiers, espace utilisé, etc.)"
+    tags=["Files"]
 )
 async def get_stats(user: dict = Depends(get_current_user)):
-    """
-    📊 STATISTIQUES UTILISATEUR
-    
-    Retourne des statistiques sur l'utilisation du stockage :
-    - Nombre total de fichiers
-    - Espace total utilisé
-    - Taille moyenne des fichiers
-    - Date du fichier le plus ancien/récent
-    """
-    user_files = files_db.get(user["id"], [])
-    
-    if not user_files:
-        return UserStats(
-            total_files=0,
-            total_size_bytes=0,
-            total_size_mb=0.0,
-            oldest_file=None,
-            newest_file=None,
-            average_file_size_mb=0.0
-        )
-    
-    total_size = sum(f["size"] for f in user_files)
-    dates = [f["created_at"] for f in user_files]
-    
-    stats = UserStats(
-        total_files=len(user_files),
-        total_size_bytes=total_size,
-        total_size_mb=round(total_size / (1024 * 1024), 2),
-        oldest_file=min(dates),
-        newest_file=max(dates),
-        average_file_size_mb=round((total_size / len(user_files)) / (1024 * 1024), 2)
-    )
-    
-    logger.info(f"Statistiques demandées: {user['id']} - {stats.total_files} fichiers, {stats.total_size_mb} MB")
-    return stats
-
-
-@app.post(
-    "/api/files/upload",
-    status_code=status.HTTP_201_CREATED,
-    tags=["Files"],
-    summary="Uploader un fichier chiffré",
-    description="Uploadez un fichier déjà chiffré côté client avec AES-256-GCM"
-)
-async def upload_file(
-    file_name: str = Form(..., description="Nom original du fichier"),
-    iv: str = Form(..., description="Vecteur d'initialisation en base64"),
-    file: UploadFile = File(..., description="Fichier chiffré"),
-    user: dict = Depends(get_current_user)
-):
-    """
-    📤 UPLOAD D'UN FICHIER CHIFFRÉ
-    
-    Le fichier reçu est DÉJÀ chiffré côté client !
-    
-    Flux:
-    1. Frontend: file → AES-256-GCM(file, encryptionKey, iv) → encryptedBlob
-    2. Frontend: envoie encryptedBlob + iv + fileName
-    3. Backend: stocke encryptedBlob tel quel (on ne peut pas le lire!)
-    
-    🔐 Même si un attaquant accède au serveur, il ne peut rien faire
-    sans l'encryptionKey qui n'a JAMAIS quitté le navigateur.
-    """
-    user_id = user["id"]
-    
-    # Vérifier le nombre de fichiers de l'utilisateur
-    user_files = files_db.get(user_id, [])
-    if len(user_files) >= MAX_FILES_PER_USER:
-        logger.warning(f"Limite de fichiers atteinte pour {user_id}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Limite de {MAX_FILES_PER_USER} fichiers atteinte"
-        )
-    
-    # Générer un ID unique pour le fichier
-    file_id = str(uuid.uuid4())
-    
-    # Chemin de stockage: storage/<user_id>/<file_id>
-    file_path = STORAGE_DIR / user_id / file_id
-    
-    # Lire le contenu chiffré
-    content = await file.read()
-    
-    # Vérifier la taille du fichier
-    if len(content) > MAX_FILE_SIZE:
-        logger.warning(f"Fichier trop volumineux: {len(content)} bytes pour {user_id}")
-        raise HTTPException(
-            status_code=400,
-            detail=f"Fichier trop volumineux (max: {MAX_FILE_SIZE / 1024 / 1024} MB)"
-        )
-    
-    # Sauvegarder le fichier chiffré
-    try:
-        with open(file_path, "wb") as f:
-            f.write(content)
-    except Exception as e:
-        logger.error(f"Erreur lors de l'écriture du fichier {file_id}: {str(e)}")
-        raise HTTPException(status_code=500, detail="Erreur lors de l'upload")
-    
-    # Enregistrer les métadonnées
-    file_metadata = FileMetadata(
-        id=file_id,
-        name=file_name,
-        iv=iv,
-        size=len(content),
-        created_at=datetime.utcnow()
-    )
-    
-    if user_id not in files_db:
-        files_db[user_id] = []
-    files_db[user_id].append(file_metadata.model_dump())
-    
-    # Log activity
-    if user_id not in activity_log_db:
-        activity_log_db[user_id] = []
-    activity_log_db[user_id].insert(0, {
-        "action": "upload",
-        "file_name": file_name,
-        "file_id": file_id,
-        "timestamp": datetime.utcnow().isoformat(),
-        "details": f"{round(len(content) / 1024, 1)} KB"
-    })
-    # Keep only last 100 entries
-    activity_log_db[user_id] = activity_log_db[user_id][:100]
-    
-    logger.info(f"Fichier uploadé: {file_name} ({len(content)} bytes) pour {user_id}")
-    return {
-        "message": "Fichier uploadé avec succès",
-        "file_id": file_id,
-        "file_name": file_name,
-        "size_bytes": len(content),
-        "size_mb": round(len(content) / (1024 * 1024), 2)
-    }
-
-
-@app.get(
-    "/api/files/search",
-    tags=["Files"],
-    summary="Rechercher des fichiers",
-    description="Recherche par nom de fichier avec suggestions"
-)
-async def search_files(q: str = "", user: dict = Depends(get_current_user)):
-    """🔍 Recherche de fichiers par nom."""
-    user_id = user["id"]
-    user_files = files_db.get(user_id, [])
-    
-    if not q.strip():
-        return {"results": [], "query": q}
-    
-    query_lower = q.strip().lower()
-    
-    # Score-based matching: exact > starts_with > contains
-    results = []
-    for f in user_files:
-        name_lower = f["name"].lower()
-        score = 0
-        if name_lower == query_lower:
-            score = 100
-        elif name_lower.startswith(query_lower):
-            score = 80
-        elif query_lower in name_lower:
-            score = 60
-        else:
-            # Check if all query chars appear in order (fuzzy)
-            qi = 0
-            for c in name_lower:
-                if qi < len(query_lower) and c == query_lower[qi]:
-                    qi += 1
-            if qi == len(query_lower):
-                score = 30
+    """Get user statistics."""
+    with get_db() as db:
+        files = FileRepository.get_user_files(db, user["id"])
         
-        if score > 0:
-            results.append({**f, "_score": score})
-    
-    # Sort by score desc, limit to 10
-    results.sort(key=lambda x: x["_score"], reverse=True)
-    # Remove score from output and serialize dates
-    clean_results = []
-    for r in results[:10]:
-        entry = {k: v for k, v in r.items() if k != "_score"}
-        if isinstance(entry.get("created_at"), datetime):
-            entry["created_at"] = entry["created_at"].isoformat()
-        clean_results.append(entry)
-    
-    return {"results": clean_results, "query": q}
-
-
-@app.get(
-    "/api/files/{file_id}",
-    tags=["Files"],
-    summary="Télécharger un fichier chiffré",
-    description="Téléchargez un fichier chiffré pour le déchiffrer côté client"
-)
-async def download_file(file_id: str, user: dict = Depends(get_current_user)):
-    """
-    📥 TÉLÉCHARGEMENT D'UN FICHIER CHIFFRÉ
-    
-    Retourne le blob chiffré tel qu'il a été uploadé.
-    
-    Flux de déchiffrement (côté client):
-    1. Backend: retourne encryptedBlob + métadonnées (iv)
-    2. Frontend: AES-256-GCM.decrypt(encryptedBlob, encryptionKey, iv)
-    3. Frontend: obtient le fichier original
-    
-    ⚠️ Si l'utilisateur a oublié son mot de passe, les fichiers sont
-    DÉFINITIVEMENT perdus ! C'est le prix de la sécurité zero-knowledge.
-    """
-    user_id = user["id"]
-    
-    # Vérifier que le fichier appartient à l'utilisateur
-    user_files = files_db.get(user_id, [])
-    file_meta = next((f for f in user_files if f["id"] == file_id), None)
-    
-    if not file_meta:
-        logger.warning(f"Fichier {file_id} non trouvé pour {user_id}")
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
-    
-    # Chemin du fichier chiffré
-    file_path = STORAGE_DIR / user_id / file_id
-    
-    if not file_path.exists():
-        logger.error(f"Fichier physique {file_id} manquant pour {user_id}")
-        raise HTTPException(status_code=404, detail="Fichier non trouvé sur le disque")
-    
-    # Log activity
-    if user_id not in activity_log_db:
-        activity_log_db[user_id] = []
-    activity_log_db[user_id].insert(0, {
-        "action": "download",
-        "file_name": file_meta["name"],
-        "file_id": file_id,
-        "timestamp": datetime.utcnow().isoformat(),
-        "details": ""
-    })
-    activity_log_db[user_id] = activity_log_db[user_id][:100]
-    
-    # Retourner le fichier chiffré avec ses métadonnées
-    logger.info(f"Téléchargement du fichier {file_id} par {user_id}")
-    return FileResponse(
-        path=file_path,
-        filename=f"{file_meta['name']}.encrypted",
-        headers={
-            "X-File-IV": file_meta["iv"],  # IV nécessaire pour déchiffrer
-            "X-File-Name": file_meta["name"]
-        }
-    )
-
-
-@app.delete(
-    "/api/files/{file_id}",
-    status_code=status.HTTP_200_OK,
-    tags=["Files"],
-    summary="Supprimer un fichier",
-    description="Supprimez définitivement un fichier chiffré et ses métadonnées"
-)
-async def delete_file(file_id: str, user: dict = Depends(get_current_user)):
-    """
-    🗑️ SUPPRESSION D'UN FICHIER
-    
-    Supprime le fichier chiffré et ses métadonnées.
-    """
-    user_id = user["id"]
-    
-    # Trouver et supprimer les métadonnées
-    user_files = files_db.get(user_id, [])
-    file_meta = next((f for f in user_files if f["id"] == file_id), None)
-    
-    if not file_meta:
-        logger.warning(f"Tentative de suppression d'un fichier inexistant {file_id} par {user_id}")
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
-    
-    # Supprimer le fichier physique
-    file_path = STORAGE_DIR / user_id / file_id
-    if file_path.exists():
-        try:
-            os.remove(file_path)
-        except Exception as e:
-            logger.error(f"Erreur lors de la suppression du fichier {file_id}: {str(e)}")
-            raise HTTPException(status_code=500, detail="Erreur lors de la suppression")
-    
-    # Supprimer les métadonnées
-    files_db[user_id] = [f for f in user_files if f["id"] != file_id]
-    
-    # Log activity
-    if user_id not in activity_log_db:
-        activity_log_db[user_id] = []
-    activity_log_db[user_id].insert(0, {
-        "action": "delete",
-        "file_name": file_meta["name"],
-        "file_id": file_id,
-        "timestamp": datetime.utcnow().isoformat(),
-        "details": ""
-    })
-    activity_log_db[user_id] = activity_log_db[user_id][:100]
-    
-    logger.info(f"Fichier {file_id} supprimé par {user_id}")
-    return {"message": "Fichier supprimé"}
-
-
-# =============================================================================
-# ROUTES - TAGS, RECHERCHE, ACTIVITÉ
-# =============================================================================
-
-@app.put(
-    "/api/files/{file_id}/tags",
-    tags=["Files"],
-    summary="Mettre à jour les tags d'un fichier",
-    description="Ajoute ou modifie les tags/dossiers d'un fichier"
-)
-async def update_file_tags(file_id: str, tag_update: TagUpdate, user: dict = Depends(get_current_user)):
-    """🏷️ Met à jour les tags d'un fichier."""
-    user_id = user["id"]
-    user_files = files_db.get(user_id, [])
-    file_meta = next((f for f in user_files if f["id"] == file_id), None)
-    
-    if not file_meta:
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
-    
-    # Nettoyer les tags (lowercase, strip, deduplicate)
-    clean_tags = list(set(t.strip().lower() for t in tag_update.tags if t.strip()))
-    file_meta["tags"] = clean_tags
-    
-    # Log activity
-    if user_id not in activity_log_db:
-        activity_log_db[user_id] = []
-    activity_log_db[user_id].insert(0, {
-        "action": "tag",
-        "file_name": file_meta["name"],
-        "file_id": file_id,
-        "timestamp": datetime.utcnow().isoformat(),
-        "details": ", ".join(clean_tags) if clean_tags else "tags supprimés"
-    })
-    activity_log_db[user_id] = activity_log_db[user_id][:100]
-    
-    logger.info(f"Tags mis à jour pour {file_id}: {clean_tags}")
-    return {"message": "Tags mis à jour", "tags": clean_tags}
-
-
+        if not files:
+            return UserStats(
+                total_files=0,
+                total_size_bytes=0,
+                total_size_mb=0.0,
+                oldest_file=None,
+                newest_file=None,
+                average_file_size_mb=0.0
+            )
+        
+        total_size = sum(f.file_size for f in files)
+        dates = [f.created_at for f in files]
+        
+        return UserStats(
+            total_files=len(files),
+            total_size_bytes=total_size,
+            total_size_mb=round(total_size / (1024 * 1024), 2),
+            oldest_file=min(dates),
+            newest_file=max(dates),
+            average_file_size_mb=round((total_size / len(files)) / (1024 * 1024), 2)
+        )
 
 
 @app.get(
     "/api/activity",
-    tags=["Files"],
-    summary="Historique d'activité",
-    description="Retourne les dernières actions de l'utilisateur"
+    response_model=List[ActivityEntry],
+    tags=["Files"]
 )
-async def get_activity(limit: int = 50, user: dict = Depends(get_current_user)):
-    """📋 Historique d'activité de l'utilisateur."""
-    user_id = user["id"]
-    entries = activity_log_db.get(user_id, [])
-    return {"activities": entries[:limit]}
+async def get_activity(user: dict = Depends(get_current_user)):
+    """Get user activity log."""
+    with get_db() as db:
+        activities = ActivityRepository.get_user_activity(db, user["id"], limit=100)
+        return [
+            ActivityEntry(
+                action=a.action,
+                file_name=a.file_name,
+                file_id=str(a.file_id) if a.file_id else None,
+                timestamp=a.timestamp,
+                details=a.details or ""
+            )
+            for a in activities
+        ]
 
 
 # =============================================================================
-# ROUTE SANTÉ (Health Check)
+# ADMIN ROUTES
 # =============================================================================
 
 @app.get(
-    "/health",
-    tags=["System"],
-    summary="Vérification de santé de l'API",
-    description="Endpoint pour vérifier que l'API fonctionne correctement"
+    "/api/admin/users",
+    tags=["Admin"]
 )
-async def health_check():
-    """
-    ❤️ Health Check
-    
-    Utilisé par Kubernetes/Docker pour vérifier que l'API est en vie.
-    """
-    return {
-        "status": "healthy",
-        "version": "1.1.0",
-        "timestamp": datetime.utcnow().isoformat(),
-        "total_users": len(users_db),
-        "total_storage_mb": round(
-            sum(
-                sum(f["size"] for f in files)
-                for files in files_db.values()
-            ) / (1024 * 1024),
-            2
-        ),
-        "message": "🔒 VEIL API is running - Your secrets are safe!"
-    }
+async def list_users(admin: dict = Depends(get_admin_user)):
+    """List all users (admin only)."""
+    with get_db() as db:
+        users = db.query(User).all()
+        return [
+            {
+                "id": str(u.id),
+                "email": u.email,
+                "role": u.role,
+                "created_at": u.created_at.isoformat()
+            }
+            for u in users
+        ]
 
-
-# =============================================================================
-# ROUTE PREVIEW FICHIER CHIFFRÉ (User)
-# =============================================================================
 
 @app.get(
-    "/api/files/{file_id}/preview",
-    tags=["Files"],
-    summary="Prévisualiser les données chiffrées",
-    description="Retourne un aperçu des 512 premiers octets chiffrés en hexadécimal"
+    "/api/admin/stats",
+    tags=["Admin"]
 )
-async def preview_encrypted_file(file_id: str, user: dict = Depends(get_current_user)):
-    """
-    👁️ PRÉVISUALISATION CHIFFRÉE
-    
-    Permet à l'utilisateur de voir que ses données sont bien chiffrées.
-    Retourne les 512 premiers octets du fichier en hexadécimal.
-    """
-    import hashlib
-    
-    user_id = user["id"]
-    
-    # Vérifier que le fichier appartient à l'utilisateur
-    user_files = files_db.get(user_id, [])
-    file_meta = next((f for f in user_files if f["id"] == file_id), None)
-    
-    if not file_meta:
-        raise HTTPException(status_code=404, detail="Fichier non trouvé")
-    
-    # Chemin du fichier chiffré
-    file_path = STORAGE_DIR / user_id / file_id
-    
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Fichier non trouvé sur le disque")
-    
-    # Lire les 512 premiers octets et calculer le hash
-    with open(file_path, "rb") as f:
-        content = f.read()
-        preview_bytes = content[:512]
-        sha256_hash = hashlib.sha256(content).hexdigest()
-    
-    # Convertir en hex pour affichage
-    hex_preview = preview_bytes.hex()
-    
-    logger.info(f"Preview demandée: {file_id} par {user_id}")
-    
-    return {
-        "file_id": file_id,
-        "file_name": file_meta["name"],
-        "size_bytes": file_meta["size"],
-        "sha256_hash": sha256_hash,
-        "preview_hex": hex_preview,
-        "preview_length": len(preview_bytes),
-        "message": "🔐 Ces données sont chiffrées avec AES-256-GCM - illisibles sans votre clé!"
-    }
-
-
-# =============================================================================
-# ROUTES ADMIN (Monitoring)
-# =============================================================================
-
-@app.get("/api/admin/storage", tags=["Admin"]) # Admin access for system monitoring
-async def admin_storage_view(admin: dict = Depends(get_admin_user)):
-    """
-    🗄️ VUE ADMIN DU STOCKAGE
-    
-    Liste tous les fichiers avec leurs métadonnées et hash.
-    Utilisé pour le monitoring et l'audit.
-    """
-    import hashlib
-    
-    all_files = []
-    
-    for user_id, user_files in files_db.items():
-        for file_meta in user_files:
-            file_path = STORAGE_DIR / user_id / file_meta["id"]
-            
-            # Calculer le hash SHA-256 si le fichier existe
-            sha256_hash = "N/A"
-            if file_path.exists():
-                with open(file_path, "rb") as f:
-                    sha256_hash = hashlib.sha256(f.read()).hexdigest()
-            
-            all_files.append({
-                "user_id": user_id[:8] + "...",  # Tronqué pour la privacy
-                "file_id": file_meta["id"],
-                "file_name": file_meta["name"],
-                "size_bytes": file_meta["size"],
-                "sha256_hash": sha256_hash,
-                "created_at": file_meta["created_at"].isoformat() if isinstance(file_meta["created_at"], datetime) else file_meta["created_at"]
-            })
-    
-    logger.info(f"Admin storage view: {len(all_files)} fichiers")
-    
-    return {
-        "total_files": len(all_files),
-        "files": all_files
-    }
-
-
-@app.get("/api/admin/dashboard", tags=["Admin"])
-async def admin_dashboard(admin: dict = Depends(get_admin_user)):
-    """
-    📊 DASHBOARD ADMIN
-    
-    Retourne toutes les statistiques système pour le monitoring.
-    """
-    total_files = sum(len(files) for files in files_db.values())
-    total_size = sum(
-        sum(f["size"] for f in files)
-        for files in files_db.values()
-    )
-    
-    # Calculer les stats par utilisateur
-    users_stats = []
-    for email, user_data in users_db.items():
-        user_id = user_data["id"]
-        user_files = files_db.get(user_id, [])
-        user_size = sum(f["size"] for f in user_files)
-        users_stats.append({
-            "email": email[:3] + "***",  # Masqué pour privacy
-            "files_count": len(user_files),
-            "storage_mb": round(user_size / (1024 * 1024), 2)
-        })
-    
-    return {
-        "system": {
-            "status": "healthy",
-            "version": "1.1.0",
-            "timestamp": datetime.utcnow().isoformat()
-        },
-        "users": {
-            "total": len(users_db),
-            "details": users_stats
-        },
-        "storage": {
+async def admin_stats(admin: dict = Depends(get_admin_user)):
+    """Get global statistics (admin only)."""
+    with get_db() as db:
+        total_users = db.query(User).count()
+        total_files = db.query(File).filter(File.status == "uploaded").count()
+        total_size = db.query(func.sum(File.file_size)).filter(File.status == "uploaded").scalar() or 0
+        
+        return {
+            "total_users": total_users,
             "total_files": total_files,
             "total_size_bytes": total_size,
-            "total_size_mb": round(total_size / (1024 * 1024), 2),
-            "average_file_size_mb": round((total_size / total_files) / (1024 * 1024), 2) if total_files > 0 else 0
-        },
-        "limits": {
-            "max_file_size_mb": MAX_FILE_SIZE / (1024 * 1024),
-            "max_files_per_user": MAX_FILES_PER_USER
+            "total_size_mb": round(total_size / (1024 * 1024), 2)
         }
-    }
-
 
 
 # =============================================================================
-# POINT D'ENTRÉE
+# STARTUP/SHUTDOWN EVENTS
 # =============================================================================
 
-@app.post("/api/auth/promote")
-async def promote_user(request: AdminPromotion, current_user: dict = Depends(get_current_user)):
-    """Promeut un utilisateur au rang d'administrateur avec une clé secrète."""
-    if request.secret_key != ADMIN_KEY:
-        logger.warning(f"Échec de promotion admin pour {current_user['email']} - Clé invalide")
-        raise HTTPException(status_code=401, detail="Clé de sécurité incorrecte")
-    
-    # Mise à jour du rôle
-    current_user["role"] = "admin"
-    logger.info(f"Utilisateur promu ADMIN: {current_user['email']}")
-    
-    return {"message": "Promotion réussie ! Bienvenue dans le terminal admin.", "role": "admin"}
+@app.on_event("startup")
+async def startup_event():
+    """Run on application startup."""
+    logger.info("🚀 VEIL API starting up...")
+    logger.info(f"📊 Database: {DATABASE_URL.split('@')[-1]}")
+    logger.info(f"💾 MinIO: {MINIO_ENDPOINT} (bucket: {MINIO_BUCKET})")
+    logger.info("✅ Application ready")
 
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Run on application shutdown."""
+    logger.info("👋 VEIL API shutting down...")
+    from database.connection import close_db
+    close_db()
+    logger.info("✅ Shutdown complete")
+
+
+# =============================================================================
+# MAIN
+# =============================================================================
 
 if __name__ == "__main__":
     import uvicorn
-    print("""
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║                                                               ║
-    ║   🔒 VEIL - Zero-Knowledge Cloud Storage                      ║
-    ║                                                               ║
-    ║   API: http://localhost:8000                                  ║
-    ║   Docs: http://localhost:8000/docs (Swagger UI)               ║
-    ║                                                               ║
-    ╚═══════════════════════════════════════════════════════════════╝
-    """)
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )

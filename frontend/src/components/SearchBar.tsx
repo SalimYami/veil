@@ -8,7 +8,7 @@ export function SearchBar() {
     const { searchFiles, searchResults, isSearching, setSearchQuery } = useFileStore();
     const inputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
-    const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+    const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     const [selectedIndex, setSelectedIndex] = useState(-1);
 
     const handleChange = useCallback((value: string) => {

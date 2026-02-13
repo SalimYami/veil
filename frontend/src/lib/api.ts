@@ -37,7 +37,10 @@ export interface FileMetadata {
     id: string;
     name: string;
     iv: string;
+    auth_tag: string;
     size: number;
+    mime_type?: string;
+    tags?: string[];
     created_at: string;
 }
 
@@ -85,51 +88,79 @@ export async function listFiles(token: string): Promise<FileMetadata[]> {
 }
 
 /**
- * Upload un fichier chiffré.
+ * Upload un fichier chiffré (presigned URL flow).
  * 
  * @param token - JWT de l'utilisateur
  * @param fileName - Nom original du fichier
  * @param iv - Vecteur d'initialisation (Base64)
+ * @param authTag - Tag d'authentification AES-GCM (Base64)
  * @param encryptedData - Données chiffrées
+ * @param mimeType - Type MIME (optionnel)
  */
 export async function uploadFile(
     token: string,
     fileName: string,
     iv: string,
-    encryptedData: Uint8Array
-): Promise<{ message: string; file_id: string }> {
-    const formData = new FormData();
-    formData.append('file_name', fileName);
-    formData.append('iv', iv);
-    formData.append('file', new Blob([new Uint8Array(encryptedData).buffer as ArrayBuffer]));
-
-    const response = await api.post('/api/files/upload', formData, {
-        headers: {
-            'Content-Type': 'multipart/form-data',
-            'Authorization': `Bearer ${token}`,
-        },
+    authTag: string,
+    encryptedData: Uint8Array,
+    mimeType?: string
+): Promise<{ file_id: string }> {
+    // Step 1: Request presigned upload URL
+    const initResponse = await api.post('/api/files/upload-init', {
+        file_name: fileName,
+        iv: iv,
+        auth_tag: authTag,
+        file_size: encryptedData.byteLength,
+        mime_type: mimeType
+    }, {
+        headers: { Authorization: `Bearer ${token}` }
     });
-    return response.data;
+
+    const { upload_url, file_id } = initResponse.data;
+
+    // Step 2: Upload directly to MinIO using presigned URL
+    await axios.put(upload_url, encryptedData, {
+        headers: {
+            'Content-Type': 'application/octet-stream'
+        }
+    });
+
+    // Step 3: Confirm upload to backend
+    await api.post('/api/files/upload-confirm', {
+        file_id: file_id
+    }, {
+        headers: { Authorization: `Bearer ${token}` }
+    });
+
+    return { file_id };
 }
 
 /**
- * Télécharge un fichier chiffré.
+ * Télécharge un fichier chiffré (presigned URL flow).
  * 
- * @returns Le blob chiffré et l'IV nécessaire pour le déchiffrer
+ * @returns Le blob chiffré, l'IV et l'auth_tag nécessaires pour le déchiffrer
  */
 export async function downloadFile(
     token: string,
     fileId: string
-): Promise<{ data: ArrayBuffer; iv: string; fileName: string }> {
-    const response = await api.get(`/api/files/${fileId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'arraybuffer',
+): Promise<{ data: ArrayBuffer; iv: string; authTag: string; fileName: string }> {
+    // Step 1: Request presigned download URL
+    const urlResponse = await api.get(`/api/files/${fileId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const { download_url, file_name, iv, auth_tag } = urlResponse.data;
+
+    // Step 2: Download directly from MinIO using presigned URL
+    const fileResponse = await axios.get(download_url, {
+        responseType: 'arraybuffer'
     });
 
     return {
-        data: response.data,
-        iv: response.headers['x-file-iv'],
-        fileName: response.headers['x-file-name'],
+        data: fileResponse.data,
+        iv: iv,
+        authTag: auth_tag,
+        fileName: file_name
     };
 }
 

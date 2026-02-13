@@ -22,7 +22,9 @@ export interface VeilFile {
     id: string;
     name: string;
     iv: string;
+    auth_tag: string;
     size: number;
+    mime_type?: string;
     created_at: string;
     tags: string[];
 }
@@ -104,9 +106,14 @@ export const useFileStore = create<FileState>((set, get) => ({
         set({ isLoading: true, error: null });
 
         try {
-            const files = await api.listFiles(token);
+            const rawFiles = await api.listFiles(token);
+            // Ensure tags is always an array for the store
+            const files: VeilFile[] = rawFiles.map(f => ({
+                ...f,
+                tags: f.tags || []
+            }));
             // Extract all unique tags
-            const allTags = [...new Set(files.flatMap((f: VeilFile) => f.tags || []))];
+            const allTags = [...new Set(files.flatMap(f => f.tags))];
             set({ files, allTags, isLoading: false });
         } catch (error: any) {
             set({
@@ -153,12 +160,24 @@ export const useFileStore = create<FileState>((set, get) => ({
                 const { ciphertext, iv } = await encryptFile(fileBuffer, encryptionKey);
                 const ivBase64 = arrayBufferToBase64(iv);
 
+                // Extract Auth Tag (last 16 bytes for AES-GCM 128-bit tag)
+                const tag = ciphertext.slice(-16);
+                const encryptedContent = ciphertext.slice(0, -16);
+                const tagBase64 = arrayBufferToBase64(tag);
+
                 // Update status to uploading
                 queue[i].status = 'uploading';
                 queue[i].progress = 60;
                 set({ uploadQueue: [...queue] });
 
-                await api.uploadFile(token, queue[i].file.name, ivBase64, ciphertext);
+                await api.uploadFile(
+                    token,
+                    queue[i].file.name,
+                    ivBase64,
+                    tagBase64,
+                    encryptedContent,
+                    queue[i].file.type
+                );
 
                 // Done
                 queue[i].status = 'done';
@@ -211,9 +230,16 @@ export const useFileStore = create<FileState>((set, get) => ({
         set({ isLoading: true, error: null });
 
         try {
-            const { data, iv, fileName } = await api.downloadFile(token, fileId);
+            const { data, iv, authTag, fileName } = await api.downloadFile(token, fileId);
             const ivBytes = base64ToArrayBuffer(iv);
-            const decrypted = await decryptFile(data, ivBytes, encryptionKey);
+            const tagBytes = base64ToArrayBuffer(authTag);
+
+            // Recombine data and tag for WebCrypto decrypt
+            const combined = new Uint8Array(data.byteLength + tagBytes.byteLength);
+            combined.set(new Uint8Array(data), 0);
+            combined.set(tagBytes, data.byteLength);
+
+            const decrypted = await decryptFile(combined.buffer as ArrayBuffer, ivBytes, encryptionKey);
 
             const blob = new Blob([decrypted]);
             const url = URL.createObjectURL(blob);

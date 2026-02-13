@@ -21,23 +21,26 @@ Ce document explique en détail le fonctionnement de VEIL, un système de stocka
 
 ## 🎯 Vue d'Ensemble
 
-VEIL est une application de stockage de fichiers sécurisée avec **chiffrement côté client**. 
+VEIL est une application de stockage de fichiers sécurisée avec **chiffrement côté client**.
 
 ### Le Principe Fondamental
 
 ```
-┌─────────────────┐         ┌─────────────────┐
-│   NAVIGATEUR    │         │     SERVEUR     │
-│                 │         │                 │
-│  📄 → 🔒 → 📦   │ ──────► │   📦 📦 📦     │
-│                 │         │   (illisible)   │
-│     VOS YEUX    │         │    AVEUGLE      │
-└─────────────────┘         └─────────────────┘
+┌─────────────────┐         ┌─────────────────┐         ┌─────────────────┐
+│   NAVIGATEUR    │         │   BACKEND API   │         │     MINIO       │
+│                 │         │                 │         │                 │
+│  📄 → 🔒 → 📦   │ ──────► │  Presigned URL  │ ──────► │   📦 📦 📦     │
+│                 │         │   PostgreSQL    │         │   (chiffré)     │
+│     VOS YEUX    │         │  (métadonnées)  │         │    AVEUGLE      │
+└─────────────────┘         └─────────────────┘         └─────────────────┘
 ```
 
 **En résumé :**
+
 - ✅ Le **chiffrement** se fait dans votre navigateur
-- ✅ Le serveur ne reçoit que des **blobs chiffrés** (illisibles)
+- ✅ Le backend génère des **presigned URLs** pour upload/download direct vers MinIO
+- ✅ **PostgreSQL** stocke uniquement les métadonnées (NO plaintext, NO keys)
+- ✅ **MinIO** stocke uniquement les blobs chiffrés (illisibles)
 - ✅ Seul **vous** possédez la clé de déchiffrement
 - ⚠️ Si vous perdez votre mot de passe, vos données sont **DÉFINITIVEMENT** perdues
 
@@ -48,10 +51,12 @@ VEIL est une application de stockage de fichiers sécurisée avec **chiffrement 
 ### Pourquoi "Zero-Knowledge" ?
 
 Le serveur ne peut **JAMAIS** :
+
 - Lire le contenu de vos fichiers
 - Déchiffrer vos données
 - Récupérer votre mot de passe
 - Accéder à vos clés de chiffrement
+- Voir les blobs en clair (stockés dans MinIO)
 
 ### Le Secret : La Dérivation de Clés
 
@@ -87,7 +92,26 @@ Le serveur ne peut **JAMAIS** :
 
 ## 🚀 Démarrage Rapide
 
-### 1. Lancer le Backend
+### 1. Lancer l'Infrastructure (PostgreSQL + MinIO)
+
+```bash
+cd veil
+docker-compose up -d
+```
+
+Cela démarre :
+
+- **PostgreSQL** sur `localhost:5432`
+- **MinIO** sur `localhost:9000` (API) et `localhost:9001` (Console)
+
+### 2. Initialiser la Base de Données
+
+```bash
+cd backend
+psql -U veil -d veil -f database/schema.sql
+```
+
+### 3. Lancer le Backend
 
 ```bash
 cd veil/backend
@@ -99,7 +123,7 @@ L'API sera disponible sur `http://localhost:8000`
 
 > 📖 Documentation Swagger : `http://localhost:8000/docs`
 
-### 2. Lancer le Frontend
+### 4. Lancer le Frontend
 
 ```bash
 cd veil/frontend
@@ -109,7 +133,7 @@ pnpm run dev
 
 L'application sera sur `http://localhost:5173`
 
-### 3. Utilisation
+### 5. Utilisation
 
 1. **Créer un compte** : Entrez email + mot de passe
 2. **Attendre la dérivation** : ~2 secondes (Argon2 travaille)
@@ -164,6 +188,7 @@ UTILISATEUR                    NAVIGATEUR                      SERVEUR
 ### Connexion (Login)
 
 Le processus est identique :
+
 1. Re-dériver les clés à partir du mot de passe
 2. Hasher l'authKey et l'envoyer au serveur
 3. Le serveur compare avec le hash stocké
@@ -175,7 +200,7 @@ Le processus est identique :
 
 ## 📤 Flux de Chiffrement des Fichiers
 
-### Upload
+### Upload (Presigned URL Flow)
 
 ```
 1. SÉLECTION DU FICHIER
@@ -189,31 +214,46 @@ Le processus est identique :
    ├─► Chiffre avec AES-256-GCM
    │   • Clé: encryptionKey (de la RAM)
    │   • Mode: GCM (authenticated encryption)
-   └─► Résultat: blob chiffré + IV
+   └─► Résultat: blob chiffré + IV + auth_tag
 
-4. ENVOI AU SERVEUR
-   └─► POST /api/files/upload
+4. DEMANDE D'URL D'UPLOAD
+   └─► POST /api/files/upload-init
        • Headers: Authorization: Bearer <JWT>
-       • Body: { file_name, iv, encrypted_blob }
+       • Body: { file_name, iv, auth_tag, file_size, mime_type }
+       • Réponse: { upload_url, file_id, object_key }
 
-5. STOCKAGE SERVEUR
-   └─► Le serveur stocke le blob tel quel (ILLISIBLE !)
-       Il ne peut pas le déchiffrer sans l'encryptionKey
+5. UPLOAD DIRECT VERS MINIO
+   └─► PUT <upload_url>
+       • Body: encrypted_blob (binary)
+       • Bypass backend (upload direct)
+
+6. CONFIRMATION AU BACKEND
+   └─► POST /api/files/upload-confirm
+       • Body: { file_id }
+       • Backend vérifie que le blob existe dans MinIO
+       • Met à jour status: 'pending' → 'uploaded'
+
+7. STOCKAGE FINAL
+   ├─► PostgreSQL: métadonnées (file_name, iv, auth_tag, object_key)
+   └─► MinIO: blob chiffré (ILLISIBLE sans encryptionKey)
 ```
 
-### Download
+### Download (Presigned URL Flow)
 
 ```
-1. REQUÊTE AU SERVEUR
+1. DEMANDE D'URL DE TÉLÉCHARGEMENT
    └─► GET /api/files/{id}
        Headers: Authorization: Bearer <JWT>
+       Réponse: { download_url, file_name, iv, auth_tag }
 
-2. RÉCEPTION DU BLOB CHIFFRÉ
-   └─► Response: encrypted_blob + IV (dans les headers)
+2. TÉLÉCHARGEMENT DIRECT DEPUIS MINIO
+   └─► GET <download_url>
+       • Télécharge le blob chiffré depuis MinIO
+       • Bypass backend (download direct)
 
 3. DÉCHIFFREMENT (dans le navigateur)
    ├─► Récupère l'encryptionKey de la RAM
-   ├─► Déchiffre avec AES-256-GCM
+   ├─► Déchiffre avec AES-256-GCM (iv + auth_tag)
    └─► Résultat: fichier original
 
 4. TÉLÉCHARGEMENT
@@ -235,22 +275,41 @@ Le processus est identique :
 
 ```
 veil/
+├── docker-compose.yml           # PostgreSQL + MinIO (dev)
+│
 ├── backend/                     # API Python (FastAPI)
-│   ├── main.py                  # Point d'entrée (921 lignes)
+│   ├── main.py                  # Point d'entrée (refactoré)
 │   │   ├── Routes Auth          # /api/auth/register, login, refresh
-│   │   ├── Routes Files         # /api/files/, upload, download, delete
+│   │   ├── Routes Files         # /api/files/upload-init, upload-confirm, download
 │   │   └── Middleware           # CORS, Logging, Auth JWT
-│   └── storage/                 # Fichiers chiffrés stockés
+│   │
+│   ├── database/                # 🗄️ PostgreSQL
+│   │   ├── schema.sql           # Schéma de base de données
+│   │   ├── connection.py        # Gestion des connexions
+│   │   └── models.py            # Modèles SQLAlchemy (User, File, RefreshToken, ActivityLog)
+│   │
+│   ├── repositories/            # 📊 Couche d'accès aux données
+│   │   ├── user_repository.py   # CRUD utilisateurs
+│   │   ├── file_repository.py   # CRUD métadonnées fichiers
+│   │   ├── token_repository.py  # Gestion refresh tokens
+│   │   └── activity_repository.py # Logs d'activité
+│   │
+│   ├── storage/                 # 💾 MinIO
+│   │   └── minio_client.py      # Génération presigned URLs
+│   │
+│   └── services/                # 🔧 Logique métier
+│       ├── auth_service.py      # Authentification
+│       └── file_service.py      # Upload/download orchestration
 │
 └── frontend/                    # React + TypeScript + Vite
     ├── src/
     │   ├── lib/
-    │   │   ├── api.ts           # Client HTTP (axios)
+    │   │   ├── api.ts           # Client HTTP (presigned URLs)
     │   │   └── crypto.ts        # 🔐 Argon2 + AES-256-GCM
     │   │
     │   ├── store/
     │   │   ├── authStore.ts     # État authentication (Zustand)
-    │   │   └── fileStore.ts     # État fichiers (upload/download)
+    │   │   └── fileStore.ts     # État fichiers (presigned URLs)
     │   │
     │   └── components/
     │       ├── AuthForm.tsx     # Formulaire login/register
@@ -267,8 +326,10 @@ veil/
 |---------|------|--------|
 | `crypto.ts` | Cœur du chiffrement zero-knowledge | 295 |
 | `authStore.ts` | Gestion de l'encryptionKey en RAM | 183 |
-| `fileStore.ts` | Upload/download avec chiffrement | 207 |
-| `main.py` | API FastAPI complète | 921 |
+| `fileStore.ts` | Upload/download avec presigned URLs | ~250 |
+| `main.py` | API FastAPI (refactoré) | ~700 |
+| `file_service.py` | Orchestration upload/download | ~300 |
+| `minio_client.py` | Génération presigned URLs | ~150 |
 
 ---
 
@@ -296,6 +357,9 @@ veil/
 | **python-jose** | JWT tokens |
 | **passlib[bcrypt]** | Hashing des auth_hash |
 | **pydantic** | Validation des données |
+| **PostgreSQL** | Base de données (métadonnées) |
+| **SQLAlchemy** | ORM Python |
+| **MinIO** | Object storage (blobs chiffrés) |
 
 ### Cryptographie
 
@@ -317,6 +381,7 @@ veil/
 ### Q: Pourquoi utiliser Argon2id ?
 
 **R:** Argon2id est le gagnant du Password Hashing Competition (2015). Il est :
+
 - Résistant aux attaques par GPU/ASIC (utilise beaucoup de mémoire)
 - Recommandé par l'OWASP
 - Plus sûr que bcrypt/scrypt pour la dérivation de clés
@@ -324,6 +389,7 @@ veil/
 ### Q: Où est stockée l'encryptionKey ?
 
 **R:** **Uniquement en RAM** (mémoire vive du navigateur). Elle n'est :
+
 - ❌ Jamais envoyée au serveur
 - ❌ Jamais stockée en localStorage/sessionStorage
 - ❌ Jamais écrite sur le disque
@@ -332,7 +398,8 @@ Si vous fermez l'onglet, la clé est perdue et vous devez vous reconnecter.
 
 ### Q: Comment fonctionne le JWT ?
 
-**R:** 
+**R:**
+
 - **Access Token** : Durée courte (15 min), utilisé pour chaque requête API
 - **Refresh Token** : Durée longue (7 jours), permet de renouveler l'access token
 - Stockés en sessionStorage (disparaît à la fermeture du navigateur)
