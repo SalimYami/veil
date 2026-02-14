@@ -245,7 +245,7 @@ export function FileList() {
                                 Sans votre mot de passe, ces données sont strictement indéchiffrables.
                             </p>
                             <div className="preview-hex">
-                                {previewData.preview_hex.match(/.{1,64}/g)?.join('\n')}
+                                {previewData.preview_hex.match(/.{1,64}/g)?.join('\n') || previewData.preview_hex}
                             </div>
                             <div className="preview-hash">
                                 <strong>SHA-256 du Blob:</strong>
