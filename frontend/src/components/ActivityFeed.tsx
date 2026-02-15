@@ -56,7 +56,7 @@ export function ActivityFeed() {
         fetchActivity();
     }, [fetchActivity]);
 
-    if (activities.length === 0) {
+    if (!activities || activities.length === 0) {
         return (
             <div className="activity-empty">
                 <Clock size={20} />

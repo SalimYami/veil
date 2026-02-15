@@ -136,7 +136,7 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
                             </tr>
                         </thead>
                         <tbody>
-                            {storage.map((file) => (
+                            {storage?.map((file) => (
                                 <tr key={file.file_id}>
                                     <td>{file.user_id}</td>
                                     <td><code>{file.file_id}</code></td>
@@ -150,7 +150,7 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
                                     </td>
                                 </tr>
                             ))}
-                            {storage.length === 0 && (
+                            {(!storage || storage.length === 0) && (
                                 <tr>
                                     <td colSpan={5} style={{ textAlign: 'center', padding: '40px' }}>
                                         Aucun fichier physique détecté sur le serveur.

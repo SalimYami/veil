@@ -45,6 +45,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://veil:veil@veil-db:5432/veil
       - MINIO_ENDPOINT=veil-storage:9000
+      - MINIO_EXTERNAL_ENDPOINT=http://localhost:9000
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_BUCKET=veil-storage
@@ -57,6 +58,27 @@ services:
         condition: service_healthy
       veil-storage:
         condition: service_healthy
+
+  # MinIO Setup (CORS & Bucket)
+  veil-storage-setup:
+    image: minio/mc:latest
+    container_name: veil-minio-setup
+    depends_on:
+      veil-storage:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc alias set myminio http://veil-storage:9000 minioadmin minioadmin;
+      /usr/bin/mc mb --ignore-existing myminio/veil-storage;
+      /usr/bin/mc anonymous set public myminio/veil-storage;
+      
+      # Set CORS via admin config
+      /usr/bin/mc admin config set myminio browser cors_allow_origin=*;
+      
+      echo 'CORS configuration applied via mc admin config.';
+      exit 0;
+      "
 
   # Frontend Web App
   frontend:

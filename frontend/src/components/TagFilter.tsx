@@ -4,7 +4,7 @@ import { Tag, Hash } from 'lucide-react';
 export function TagFilter() {
     const { allTags, activeTag, setActiveTag } = useFileStore();
 
-    if (allTags.length === 0) {
+    if (!allTags || allTags.length === 0) {
         return null;
     }
 

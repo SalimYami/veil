@@ -92,7 +92,7 @@ export function FileList() {
         displayedFiles = displayedFiles.filter(f => f.name.toLowerCase().includes(q));
     }
 
-    if (isLoading && files.length === 0) {
+    if (isLoading && (!files || files.length === 0)) {
         return (
             <div className="file-list-loading">
                 <Loader2 className="spinner" size={32} />
@@ -101,7 +101,7 @@ export function FileList() {
         );
     }
 
-    if (files.length === 0) {
+    if (!files || files.length === 0) {
         return (
             <div className="file-list-empty">
                 <Lock size={48} />

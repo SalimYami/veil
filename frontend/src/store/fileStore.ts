@@ -113,8 +113,8 @@ export const useFileStore = create<FileState>((set, get) => ({
                 tags: f.tags || []
             }));
             // Extract all unique tags
-            const allTags = [...new Set(files.flatMap(f => f.tags))];
-            set({ files, allTags, isLoading: false });
+            const allTags = [...new Set(files.flatMap(f => f.tags || []))];
+            set({ files: files || [], allTags: allTags || [], isLoading: false });
         } catch (error: any) {
             set({
                 isLoading: false,
@@ -342,7 +342,7 @@ export const useFileStore = create<FileState>((set, get) => ({
 
         try {
             const { activities } = await api.getActivityHistory(token, 30);
-            set({ activities });
+            set({ activities: activities || [] });
         } catch {
             // Silent fail
         }

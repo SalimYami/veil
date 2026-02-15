@@ -282,11 +282,11 @@ export interface ActivityEntry {
  * Récupère l'historique d'activité de l'utilisateur.
  */
 export async function getActivityHistory(token: string, limit: number = 50): Promise<{ activities: ActivityEntry[] }> {
-    const response = await api.get('/api/activity', {
+    const response = await api.get<ActivityEntry[]>('/api/activity', {
         params: { limit },
         headers: { Authorization: `Bearer ${token}` },
     });
-    return response.data;
+    return { activities: response.data };
 }
 
 export default api;

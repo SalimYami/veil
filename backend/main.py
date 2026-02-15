@@ -101,6 +101,7 @@ MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET", "veil-storage")
+MINIO_EXTERNAL_ENDPOINT = os.getenv("MINIO_EXTERNAL_ENDPOINT", "http://localhost:9000")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
 # Limits
@@ -138,6 +139,7 @@ auth_service = AuthService(
 file_service = FileService(
     minio_client=minio_client,
     bucket_name=MINIO_BUCKET,
+    external_endpoint=MINIO_EXTERNAL_ENDPOINT,
     max_files_per_user=MAX_FILES_PER_USER
 )
 

@@ -18,17 +18,19 @@ logger = logging.getLogger("veil.services.file")
 class FileService:
     """Service for file operations with MinIO presigned URLs."""
     
-    def __init__(self, minio_client: MinIOClient, bucket_name: str, max_files_per_user: int = 1000):
+    def __init__(self, minio_client: MinIOClient, bucket_name: str, external_endpoint: str, max_files_per_user: int = 1000):
         """
         Initialize file service.
         
         Args:
             minio_client: MinIO client instance
             bucket_name: MinIO bucket name
+            external_endpoint: External MinIO endpoint for browser access
             max_files_per_user: Maximum files per user
         """
         self.minio_client = minio_client
         self.bucket_name = bucket_name
+        self.external_endpoint = external_endpoint.rstrip("/")
         self.max_files_per_user = max_files_per_user
     
     def initiate_upload(
@@ -79,6 +81,13 @@ class FileService:
                 object_key=object_key,
                 expires=900  # 15 minutes
             )
+            
+            # Replace internal endpoint with external one for the browser
+            # From: http://veil-storage:9000/bucket/key...
+            # To: http://localhost:9000/bucket/key...
+            if "veil-storage:9000" in upload_url:
+                upload_url = upload_url.replace("http://veil-storage:9000", self.external_endpoint)
+                upload_url = upload_url.replace("https://veil-storage:9000", self.external_endpoint)
             
             # Create file metadata with status='pending'
             file_meta = FileRepository.create_file_metadata(
@@ -191,6 +200,11 @@ class FileService:
                 object_key=file_meta.object_key,
                 expires=900  # 15 minutes
             )
+            
+            # Replace internal endpoint with external one for the browser
+            if "veil-storage:9000" in download_url:
+                download_url = download_url.replace("http://veil-storage:9000", self.external_endpoint)
+                download_url = download_url.replace("https://veil-storage:9000", self.external_endpoint)
             
             # Log activity
             ActivityRepository.log_activity(
