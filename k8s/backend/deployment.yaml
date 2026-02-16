@@ -1,0 +1,116 @@
+# ═══════════════════════════════════════════════════
+# Veil — Backend Deployment
+# ═══════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: veil-backend
+  namespace: veil
+  labels:
+    app: veil
+    component: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: veil
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: veil
+        component: backend
+    spec:
+      containers:
+        - name: backend
+          image: veil-backend:latest # Replace with your registry: ghcr.io/you/veil-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            # Database connection string
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: veil-secrets
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: veil-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: veil-config
+                  key: POSTGRES_DB
+            - name: DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@veil-postgres-svc:5432/$(POSTGRES_DB)"
+            # MinIO
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: veil-config
+                  key: MINIO_ENDPOINT
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: veil-secrets
+                  key: MINIO_ROOT_USER
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: veil-secrets
+                  key: MINIO_ROOT_PASSWORD
+            - name: MINIO_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: veil-config
+                  key: MINIO_BUCKET
+            # JWT & Admin
+            - name: VEIL_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: veil-secrets
+                  key: VEIL_SECRET_KEY
+            - name: VEIL_REFRESH_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: veil-secrets
+                  key: VEIL_REFRESH_SECRET_KEY
+            - name: VEIL_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: veil-secrets
+                  key: VEIL_ADMIN_KEY
+            # Limits & CORS
+            - name: MAX_FILE_SIZE
+              valueFrom:
+                configMapKeyRef:
+                  name: veil-config
+                  key: MAX_FILE_SIZE
+            - name: VEIL_ALLOWED_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: veil-config
+                  key: VEIL_ALLOWED_ORIGINS
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /docs
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /docs
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20

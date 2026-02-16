@@ -1,0 +1,79 @@
+# ═══════════════════════════════════════════════════
+# Veil — PostgreSQL StatefulSet
+# ═══════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: veil-postgres
+  namespace: veil
+  labels:
+    app: veil
+    component: database
+spec:
+  serviceName: veil-postgres-svc
+  replicas: 1
+  selector:
+    matchLabels:
+      app: veil
+      component: database
+  template:
+    metadata:
+      labels:
+        app: veil
+        component: database
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+              name: postgres
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: veil-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: veil-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: veil-secrets
+                  key: POSTGRES_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-schema
+              mountPath: /docker-entrypoint-initdb.d
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "veil"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "veil"]
+            initialDelaySeconds: 30
+            periodSeconds: 15
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: veil-postgres-pvc
+        - name: init-schema
+          configMap:
+            name: veil-schema
+            # You must create this ConfigMap from schema.sql:
+            # kubectl create configmap veil-schema --from-file=schema.sql=backend/database/schema.sql -n veil

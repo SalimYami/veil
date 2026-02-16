@@ -1,0 +1,10 @@
+# ═══════════════════════════════════════════════════
+# Veil — Kubernetes Namespace
+# ═══════════════════════════════════════════════════
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: veil
+  labels:
+    app: veil
+    environment: production

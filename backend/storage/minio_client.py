@@ -26,7 +26,8 @@ class MinIOClient:
         endpoint: str,
         access_key: str,
         secret_key: str,
-        secure: bool = False
+        secure: bool = False,
+        region: Optional[str] = None
     ):
         """
         Initialize MinIO client.
@@ -36,15 +37,17 @@ class MinIOClient:
             access_key: MinIO access key
             secret_key: MinIO secret key
             secure: Use HTTPS (True) or HTTP (False)
+            region: AWS/MinIO region
         """
         self.client = Minio(
             endpoint=endpoint,
             access_key=access_key,
             secret_key=secret_key,
-            secure=secure
+            secure=secure,
+            region=region
         )
         
-        logger.info(f"MinIO client initialized: {endpoint} (secure={secure})")
+        logger.info(f"MinIO client initialized: {endpoint} (secure={secure}, region={region})")
     
     def initialize_bucket(self, bucket_name: str) -> None:
         """

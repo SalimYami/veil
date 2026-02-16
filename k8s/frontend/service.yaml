@@ -1,0 +1,21 @@
+# ═══════════════════════════════════════════════════
+# Veil — Frontend Service
+# ═══════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  name: veil-frontend-svc
+  namespace: veil
+  labels:
+    app: veil
+    component: frontend
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: veil
+    component: frontend

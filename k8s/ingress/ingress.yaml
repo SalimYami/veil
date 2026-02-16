@@ -1,0 +1,48 @@
+# ═══════════════════════════════════════════════════
+# Veil — Ingress (TLS + Routing)
+# ═══════════════════════════════════════════════════
+# Requires: nginx-ingress-controller + cert-manager
+# Install:
+#   helm install ingress-nginx ingress-nginx/ingress-nginx -n ingress-nginx --create-namespace
+#   helm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace --set installCRDs=true
+# ═══════════════════════════════════════════════════
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: veil-ingress
+  namespace: veil
+  labels:
+    app: veil
+  annotations:
+    # TLS via cert-manager (Let's Encrypt)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # Nginx-specific
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - veil.example.com # ← Replace with your domain
+      secretName: veil-tls-cert
+  rules:
+    - host: veil.example.com # ← Replace with your domain
+      http:
+        paths:
+          # Backend API → /api/*
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: veil-backend-svc
+                port:
+                  number: 8000
+          # Frontend → everything else
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: veil-frontend-svc
+                port:
+                  number: 80

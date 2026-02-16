@@ -1,0 +1,18 @@
+# ═══════════════════════════════════════════════════
+# Veil — PostgreSQL PersistentVolumeClaim
+# ═══════════════════════════════════════════════════
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: veil-postgres-pvc
+  namespace: veil
+  labels:
+    app: veil
+    component: database
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: standard  # Uncomment and adjust for your cluster

@@ -27,6 +27,7 @@ Le serveur ne voit JAMAIS les données en clair !
 import os
 import logging
 import time
+import traceback
 from datetime import datetime
 from typing import Optional, List
 
@@ -118,13 +119,26 @@ logger.info("Initializing database connection...")
 init_db(DATABASE_URL)
 
 # Initialize MinIO
-logger.info("Initializing MinIO client...")
+logger.info("Initializing MinIO clients...")
+# Internal client (for backend-to-storage ops)
 minio_client = MinIOClient(
     endpoint=MINIO_ENDPOINT,
     access_key=MINIO_ACCESS_KEY,
     secret_key=MINIO_SECRET_KEY,
-    secure=MINIO_SECURE
+    secure=MINIO_SECURE,
+    region="us-east-1"
 )
+
+# External client (for presigned URLs generated with localhost)
+ext_endpoint = MINIO_EXTERNAL_ENDPOINT.replace("http://", "").replace("https://", "").split("/")[0]
+minio_client_external = MinIOClient(
+    endpoint=ext_endpoint,
+    access_key=MINIO_ACCESS_KEY,
+    secret_key=MINIO_SECRET_KEY,
+    secure=MINIO_EXTERNAL_ENDPOINT.startswith("https"),
+    region="us-east-1"
+)
+
 minio_client.initialize_bucket(MINIO_BUCKET)
 
 # Initialize services
@@ -138,8 +152,8 @@ auth_service = AuthService(
 
 file_service = FileService(
     minio_client=minio_client,
+    minio_client_external=minio_client_external,
     bucket_name=MINIO_BUCKET,
-    external_endpoint=MINIO_EXTERNAL_ENDPOINT,
     max_files_per_user=MAX_FILES_PER_USER
 )
 
@@ -542,8 +556,12 @@ async def upload_init(
             mime_type=request.mime_type
         )
         return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error in upload_init: {str(e)}")
+        logger.error(traceback.format_exc())
+        if isinstance(e, ValueError):
+            raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post(

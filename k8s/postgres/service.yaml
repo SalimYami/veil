@@ -1,0 +1,21 @@
+# ═══════════════════════════════════════════════════
+# Veil — PostgreSQL Service
+# ═══════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  name: veil-postgres-svc
+  namespace: veil
+  labels:
+    app: veil
+    component: database
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+  selector:
+    app: veil
+    component: database

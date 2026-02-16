@@ -18,19 +18,25 @@ logger = logging.getLogger("veil.services.file")
 class FileService:
     """Service for file operations with MinIO presigned URLs."""
     
-    def __init__(self, minio_client: MinIOClient, bucket_name: str, external_endpoint: str, max_files_per_user: int = 1000):
+    def __init__(
+        self,
+        minio_client: MinIOClient,
+        minio_client_external: MinIOClient,
+        bucket_name: str,
+        max_files_per_user: int = 1000
+    ):
         """
         Initialize file service.
         
         Args:
-            minio_client: MinIO client instance
+            minio_client: MinIO client instance for internal operations
+            minio_client_external: MinIO client instance for external presigned URLs
             bucket_name: MinIO bucket name
-            external_endpoint: External MinIO endpoint for browser access
             max_files_per_user: Maximum files per user
         """
         self.minio_client = minio_client
+        self.minio_client_external = minio_client_external
         self.bucket_name = bucket_name
-        self.external_endpoint = external_endpoint.rstrip("/")
         self.max_files_per_user = max_files_per_user
     
     def initiate_upload(
@@ -76,18 +82,13 @@ class FileService:
             object_key = f"{user_id}/{uuid.uuid4()}"
             
             # Generate presigned upload URL (15 minutes)
-            upload_url = self.minio_client.generate_upload_url(
+            # Generate presigned upload URL (15 minutes)
+            # CRITICAL: We use minio_client_external so the signature uses the host the browser sees.
+            upload_url = self.minio_client_external.generate_upload_url(
                 bucket_name=self.bucket_name,
                 object_key=object_key,
                 expires=900  # 15 minutes
             )
-            
-            # Replace internal endpoint with external one for the browser
-            # From: http://veil-storage:9000/bucket/key...
-            # To: http://localhost:9000/bucket/key...
-            if "veil-storage:9000" in upload_url:
-                upload_url = upload_url.replace("http://veil-storage:9000", self.external_endpoint)
-                upload_url = upload_url.replace("https://veil-storage:9000", self.external_endpoint)
             
             # Create file metadata with status='pending'
             file_meta = FileRepository.create_file_metadata(
@@ -195,16 +196,13 @@ class FileService:
                 raise ValueError("File upload not confirmed")
             
             # Generate presigned download URL (15 minutes)
-            download_url = self.minio_client.generate_download_url(
+            # Generate presigned download URL (15 minutes)
+            # CRITICAL: We use minio_client_external so the signature uses the host the browser sees.
+            download_url = self.minio_client_external.generate_download_url(
                 bucket_name=self.bucket_name,
                 object_key=file_meta.object_key,
                 expires=900  # 15 minutes
             )
-            
-            # Replace internal endpoint with external one for the browser
-            if "veil-storage:9000" in download_url:
-                download_url = download_url.replace("http://veil-storage:9000", self.external_endpoint)
-                download_url = download_url.replace("https://veil-storage:9000", self.external_endpoint)
             
             # Log activity
             ActivityRepository.log_activity(
