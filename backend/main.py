@@ -48,6 +48,7 @@ from repositories.activity_repository import ActivityRepository
 from storage.minio_client import MinIOClient
 from services.auth_service import AuthService
 from services.file_service import FileService
+from sqlalchemy import func
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -98,11 +99,11 @@ ADMIN_KEY = os.getenv("VEIL_ADMIN_KEY", "veil-admin-1234")
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://veil:veil@localhost:5432/veil")
 
 # MinIO Configuration
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "localhost:9000")
+MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "veil-storage:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
 MINIO_BUCKET = os.getenv("MINIO_BUCKET", "veil-storage")
-MINIO_EXTERNAL_ENDPOINT = os.getenv("MINIO_EXTERNAL_ENDPOINT", "http://localhost:9000")
+MINIO_EXTERNAL_ENDPOINT = os.getenv("MINIO_EXTERNAL_ENDPOINT", "http://127.0.0.1:9999")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
 # Limits
@@ -116,48 +117,65 @@ MAX_FILES_PER_USER = int(os.getenv("MAX_FILES_PER_USER", "1000"))
 
 # Initialize database
 logger.info("Initializing database connection...")
-init_db(DATABASE_URL)
+try:
+    init_db(DATABASE_URL)
+    logger.info("✅ Database initialized successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize database: {str(e)}")
+    logger.error(traceback.format_exc())
+    # On ne raise pas forcément ici pour permettre au healthcheck de montrer l'erreur
+    # Mais FastAPI s'arrêtera probablement au premier appel DB
 
 # Initialize MinIO
 logger.info("Initializing MinIO clients...")
-# Internal client (for backend-to-storage ops)
-minio_client = MinIOClient(
-    endpoint=MINIO_ENDPOINT,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=MINIO_SECURE,
-    region="us-east-1"
-)
+try:
+    # Get region from env or default to us-east-1
+    minio_region = os.getenv("MINIO_REGION", "us-east-1")
+    
+    # Internal client (for backend-to-storage ops)
+    minio_client = MinIOClient(
+        endpoint=MINIO_ENDPOINT,
+        access_key=MINIO_ACCESS_KEY,
+        secret_key=MINIO_SECRET_KEY,
+        secure=MINIO_SECURE,
+        region=minio_region
+    )
 
-# External client (for presigned URLs generated with localhost)
-ext_endpoint = MINIO_EXTERNAL_ENDPOINT.replace("http://", "").replace("https://", "").split("/")[0]
-minio_client_external = MinIOClient(
-    endpoint=ext_endpoint,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=MINIO_EXTERNAL_ENDPOINT.startswith("https"),
-    region="us-east-1"
-)
+    # External client (for presigned URLs generated with localhost)
+    ext_endpoint = MINIO_EXTERNAL_ENDPOINT.replace("http://", "").replace("https://", "").split("/")[0]
+    minio_client_external = MinIOClient(
+        endpoint=ext_endpoint,
+        access_key=MINIO_ACCESS_KEY,
+        secret_key=MINIO_SECRET_KEY,
+        secure=MINIO_EXTERNAL_ENDPOINT.startswith("https"),
+        region=minio_region
+    )
 
-minio_client.initialize_bucket(MINIO_BUCKET)
+    minio_client.initialize_bucket(MINIO_BUCKET)
+    logger.info(f"✅ MinIO initialized successfully (region: {minio_region})")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize MinIO: {str(e)}")
+    logger.error(traceback.format_exc())
 
 # Initialize services
-auth_service = AuthService(
-    secret_key=SECRET_KEY,
-    refresh_secret_key=REFRESH_SECRET_KEY,
-    algorithm=ALGORITHM,
-    access_token_expire_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
-    refresh_token_expire_days=REFRESH_TOKEN_EXPIRE_DAYS
-)
+try:
+    auth_service = AuthService(
+        secret_key=SECRET_KEY,
+        refresh_secret_key=REFRESH_SECRET_KEY,
+        algorithm=ALGORITHM,
+        access_token_expire_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
+        refresh_token_expire_days=REFRESH_TOKEN_EXPIRE_DAYS
+    )
 
-file_service = FileService(
-    minio_client=minio_client,
-    minio_client_external=minio_client_external,
-    bucket_name=MINIO_BUCKET,
-    max_files_per_user=MAX_FILES_PER_USER
-)
-
-logger.info("✅ All services initialized successfully")
+    file_service = FileService(
+        minio_client=minio_client,
+        minio_client_external=minio_client_external,
+        bucket_name=MINIO_BUCKET,
+        max_files_per_user=MAX_FILES_PER_USER
+    )
+    logger.info("✅ All services initialized successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to initialize services: {str(e)}")
 
 
 # =============================================================================
@@ -213,7 +231,7 @@ class UploadInitRequest(BaseModel):
     file_name: str = Field(..., min_length=1, max_length=255)
     iv: str = Field(..., min_length=16)
     auth_tag: str = Field(..., min_length=16)
-    file_size: int = Field(..., gt=0, le=MAX_FILE_SIZE)
+    file_size: int = Field(..., ge=0, le=MAX_FILE_SIZE)
     mime_type: Optional[str] = None
     
     @validator('file_name')
@@ -393,6 +411,46 @@ app = FastAPI(
     },
 )
 
+# ═══════════════════════════════════════════════════════════════════════════
+# EXCEPTION HANDLER GLOBAL (AVEC HEADERS CORS)
+# ═══════════════════════════════════════════════════════════════════════════
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """
+    Gère toutes les exceptions non catchées avec headers CORS.
+    CRITIQUE : Sans ceci, les erreurs 500 n'ont pas de headers CORS.
+    """
+    logger.error(f"❌ Unhandled exception on {request.method} {request.url.path}")
+    logger.error(f"   Error: {str(exc)}")
+    logger.error(f"   Traceback:\n{traceback.format_exc()}")
+
+    # Déterminer le status code
+    status_code = 500
+    detail = "Internal server error"
+
+    if isinstance(exc, HTTPException):
+        status_code = exc.status_code
+        detail = exc.detail
+
+    # Récupérer l'origine autorisée si possible
+    origin = request.headers.get("origin")
+    allowed_origin = "*"
+    if origin in allowed_origins:
+        allowed_origin = origin
+
+    # Retourner avec headers CORS explicites
+    return JSONResponse(
+        status_code=status_code,
+        content={"detail": detail},
+        headers={
+            "Access-Control-Allow-Origin": allowed_origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        }
+    )
+
 # Add middleware
 app.add_middleware(RequestLoggingMiddleware)
 
@@ -440,11 +498,18 @@ async def health():
 )
 async def register(user: UserRegister):
     """Register a new user."""
+    logger.info(f"📝 Registration attempt for: {user.email}")
     try:
         token_data = auth_service.register_user(user.email, user.auth_hash)
+        logger.info(f"✅ User registered successfully: {user.email}")
         return Token(**token_data)
     except ValueError as e:
+        logger.warning(f"❌ Registration failed for {user.email}: {str(e)}")
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ Unexpected error during registration: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post(

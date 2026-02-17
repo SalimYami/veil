@@ -39,11 +39,12 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_REGION: ${MINIO_REGION}
       MINIO_API_CORS_ALLOW_ORIGIN: "*"
-      MINIO_SERVER_URL: "http://localhost:9000"
+      MINIO_API_CORS_ALLOW_HEADERS: "*"
+      MINIO_API_CORS_ALLOW_METHODS: "GET,POST,PUT,DELETE,OPTIONS"
       MINIO_BROWSER: "on"
     ports:
-      - "9000:9000"   # API
-      - "9001:9001"   # Console Web UI
+      - "9999:9000"   # API
+      - "9998:9001"   # Console Web UI
     volumes:
       - minio_data:/data
     healthcheck:
@@ -64,11 +65,13 @@ services:
       /bin/sh -c "
       sleep 5;
       /usr/bin/mc alias set myminio http://veil-storage:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
-      /usr/bin/mc mb --ignore-existing myminio/${MINIO_BUCKET};
+      /usr/bin/mc mb --ignore-existing --region ${MINIO_REGION} myminio/${MINIO_BUCKET};
       /usr/bin/mc anonymous set public myminio/${MINIO_BUCKET};
-      /usr/bin/mc admin config set myminio api cors_allow_origin=\"*\";
+      /usr/bin/mc admin config set myminio api cors_allow_origin="http://localhost:5173,http://127.0.0.1:5173,http://localhost,http://127.0.0.1";
+      /usr/bin/mc admin config set myminio api cors_allow_headers="*";
+      /usr/bin/mc admin config set myminio api cors_allow_methods="GET,POST,PUT,DELETE,OPTIONS";
       /usr/bin/mc admin service restart myminio;
-      echo 'Bucket ${MINIO_BUCKET} initialized and CORS enforced.';
+      echo 'Bucket ${MINIO_BUCKET} initialized with CORS.';
       exit 0;
       "
 
@@ -80,7 +83,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@veil-db:5432/${POSTGRES_DB}
       - MINIO_ENDPOINT=veil-storage:9000
-      - MINIO_EXTERNAL_ENDPOINT=http://localhost:9000
+      - MINIO_EXTERNAL_ENDPOINT=${MINIO_EXTERNAL_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - MINIO_BUCKET=${MINIO_BUCKET}
@@ -96,6 +99,12 @@ services:
         condition: service_healthy
       veil-storage:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   # ── Frontend (Nginx) ────────────────────────────
