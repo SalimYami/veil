@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════
+# VEIL — Caddyfile (Reverse Proxy + Auto-HTTPS)
+# ═══════════════════════════════════════════════════
+# Local dev  : caddy run --config Caddyfile
+# Public HTTPS: Replace localhost with your domain or ngrok URL
+# ═══════════════════════════════════════════════════
+
+# ── Local Development (HTTP) ─────────────────────
+:80 {
+    # Frontend (React build via Nginx)
+    handle /* {
+        reverse_proxy veil-frontend:80
+    }
+}
+
+# ── API on :8000 ─────────────────────────────────
+:8000 {
+    # Rate limiting headers for security
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+
+    reverse_proxy localhost:8000
+}
+
+# ── Production (HTTPS auto — replace with your domain) ─────
+# veil.yourdomain.com {
+#     # Caddy auto-provisions Let's Encrypt TLS — zero config!
+#
+#     header {
+#         Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+#         Content-Security-Policy "default-src 'self'; connect-src 'self' https://veil.yourdomain.com; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+#         X-Content-Type-Options nosniff
+#         X-Frame-Options DENY
+#         -Server
+#     }
+#
+#     # React frontend
+#     handle /* {
+#         reverse_proxy veil-frontend:80
+#     }
+# }
+#
+# api.veil.yourdomain.com {
+#     reverse_proxy veil-backend:8000
+# }

@@ -1,0 +1,104 @@
+# ═══════════════════════════════════════════════════
+# VEIL — Render.com Free Tier Deployment
+# ═══════════════════════════════════════════════════
+# Deploy: Connect your GitHub repo (SalimYami/veil)
+# in Render dashboard > New > Blueprint
+# ═══════════════════════════════════════════════════
+
+services:
+  # ── FastAPI Backend ────────────────────────────
+  - type: web
+    name: veil-api
+    runtime: python
+    repo: https://github.com/SalimYami/veil
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    region: frankfurt
+    healthCheckPath: /health
+
+    envVars:
+      - key: POSTGRES_USER
+        value: veil
+      - key: POSTGRES_DB
+        value: veil
+      - key: MINIO_REGION
+        value: us-east-1
+      - key: MINIO_BUCKET
+        value: veil-storage
+      - key: MAX_FILE_SIZE
+        value: "52428800" # 50MB (free tier friendly)
+      - key: MAX_FILES_PER_USER
+        value: "100"
+      # Secrets — set manually in Render dashboard:
+      - key: POSTGRES_PASSWORD
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: MINIO_ENDPOINT
+        sync: false
+      - key: MINIO_EXTERNAL_ENDPOINT
+        sync: false
+      - key: MINIO_ACCESS_KEY
+        sync: false
+      - key: MINIO_SECRET_KEY
+        sync: false
+      - key: VEIL_SECRET_KEY
+        sync: false
+      - key: VEIL_REFRESH_SECRET_KEY
+        sync: false
+      - key: VEIL_ADMIN_KEY
+        sync: false
+      - key: VEIL_ALLOWED_ORIGINS
+        fromService:
+          name: veil-frontend
+          type: web
+          property: host
+
+  # ── React Frontend ─────────────────────────────
+  - type: web
+    name: veil-frontend
+    runtime: static
+    repo: https://github.com/SalimYami/veil
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    plan: free
+    region: frankfurt
+
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+
+    routes:
+      # SPA routing — all paths → index.html
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+    envVars:
+      - key: VITE_API_URL
+        fromService:
+          name: veil-api
+          type: web
+          property: host
+
+  # ── PostgreSQL (Render managed) ────────────────
+  - type: pserv
+    name: veil-db
+    runtime: docker
+    repo: https://github.com/SalimYami/veil
+    dockerfilePath: ./infrastructure/render/postgres.Dockerfile
+    plan: free
+    disk:
+      name: veil-pg-data
+      mountPath: /var/lib/postgresql/data
+      sizeGB: 1
