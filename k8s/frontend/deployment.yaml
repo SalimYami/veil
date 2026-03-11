@@ -24,7 +24,7 @@ spec:
       containers:
         - name: frontend
           image: veil-frontend:latest # Replace with your registry: ghcr.io/you/veil-frontend:latest
-          imagePullPolicy: Always
+          imagePullPolicy: Never
           ports:
             - containerPort: 80
               name: http

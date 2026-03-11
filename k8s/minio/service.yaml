@@ -1,0 +1,23 @@
+# ═══════════════════════════════════════════════════
+# Veil — MinIO Service
+# ═══════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  name: veil-minio-svc
+  namespace: veil
+  labels:
+    app: veil
+    component: storage
+spec:
+  ports:
+    - port: 9000
+      name: api
+      targetPort: 9000
+    - port: 9001
+      name: console
+      targetPort: 9001
+  selector:
+    app: veil
+    component: storage
+  type: ClusterIP

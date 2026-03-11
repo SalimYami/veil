@@ -1,0 +1,138 @@
+# ═══════════════════════════════════════════════════
+# VEIL — Docker Compose (Development / Hot-Reload)
+# ═══════════════════════════════════════════════════
+# Fast iteration mode:
+#   - FastAPI: uvicorn --reload on :8000
+#   - React: Vite HMR on :5173
+#   - MinIO: API :9000, Console :9001
+#   - PostgreSQL: :5432
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml logs -f backend
+# ═══════════════════════════════════════════════════
+
+services:
+  # ── PostgreSQL Database ─────────────────────────
+  veil-db:
+    image: postgres:16-alpine
+    container_name: veil-postgres-dev
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-veil}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-veil_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-veil}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-veil}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── MinIO Object Storage ────────────────────────
+  veil-storage:
+    image: minio/minio:latest
+    container_name: veil-minio-dev
+    command: server /data --console-address ":9001"
+    env_file: .env
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_BROWSER: "on"
+    ports:
+      - "9000:9000" # S3 API (mapped directly for dev)
+      - "9001:9001" # MinIO Console
+    volumes:
+      - minio_dev_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # ── MinIO Bucket Setup ──────────────────────────
+  veil-storage-setup:
+    image: minio/mc:latest
+    container_name: veil-minio-setup-dev
+    depends_on:
+      veil-storage:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      sleep 3;
+      mc alias set local http://veil-storage:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin123};
+      mc mb --ignore-existing local/${MINIO_BUCKET:-veil-storage};
+      mc anonymous set public local/${MINIO_BUCKET:-veil-storage};
+      echo '✅ MinIO bucket ready.';
+      exit 0;
+      "
+    restart: on-failure
+
+  # ── Backend API (Hot-reload) ────────────────────
+  backend:
+    build:
+      context: ./backend
+      target: development
+    container_name: veil-backend-dev
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-veil}:${POSTGRES_PASSWORD:-veil_dev_password}@veil-db:5432/${POSTGRES_DB:-veil}
+      - MINIO_ENDPOINT=veil-storage:9000
+      - MINIO_EXTERNAL_ENDPOINT=http://localhost:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin123}
+      - MINIO_BUCKET=${MINIO_BUCKET:-veil-storage}
+      - VEIL_SECRET_KEY=${VEIL_SECRET_KEY:-dev-secret-key-change-me}
+      - VEIL_REFRESH_SECRET_KEY=${VEIL_REFRESH_SECRET_KEY:-dev-refresh-key}
+      - VEIL_ADMIN_KEY=${VEIL_ADMIN_KEY:-dev-admin-key}
+      - VEIL_ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost
+      - MAX_FILE_SIZE=104857600
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app # Live code mount for hot-reload
+    depends_on:
+      veil-db:
+        condition: service_healthy
+      veil-storage:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # ── Frontend (Vite HMR) ─────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: veil-frontend-dev
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_MINIO_URL=http://localhost:9000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/src:/app/src # Hot-reload source files
+      - /app/node_modules # Don't mount node_modules
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  minio_dev_data:
+    driver: local

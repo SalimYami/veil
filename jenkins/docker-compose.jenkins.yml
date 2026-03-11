@@ -1,0 +1,31 @@
+version: "3"
+
+services:
+  # Jenkins LTS with pre-installed plugins
+  jenkins:
+    image: jenkins/jenkins:lts-jdk17
+    container_name: veil-jenkins
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock  # Docker-in-Docker
+      - /usr/bin/docker:/usr/bin/docker             # Docker CLI
+      - .:/workspace/veil:ro                        # Mount repo (read-only)
+    environment:
+      - JENKINS_OPTS="--prefix=/jenkins"
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8080/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  jenkins_home:
+    driver: local

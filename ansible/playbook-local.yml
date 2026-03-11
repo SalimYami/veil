@@ -1,0 +1,226 @@
+---
+# ═══════════════════════════════════════════════════════════════
+# VEIL — Ansible Playbook Local Provisioning
+# ═══════════════════════════════════════════════════════════════
+# Installs Docker + deploys VEIL stack on localhost (or SSH host)
+#
+# Usage:
+#   ansible-playbook playbook-local.yml -i inventory.ini -K
+#   ansible-playbook playbook-local.yml -i inventory.ini --check  (dry-run)
+# ═══════════════════════════════════════════════════════════════
+
+- name: 🔒 Provision VEIL Zero-Knowledge Storage Stack
+  hosts: veil_servers
+  become: yes
+  gather_facts: yes
+  vars:
+    veil_dir: /opt/veil
+    veil_repo: "{{ lookup('env', 'VEIL_REPO_URL') | default('https://github.com/YOUR_GITHUB_USERNAME/veil.git') }}"
+    docker_compose_version: "2.24.0"
+    caddy_version: "2.7.6"
+
+  pre_tasks:
+    - name: Display target host info
+      debug:
+        msg: |
+          🔒 VEIL Provisioning Target
+          ─────────────────────────────────
+          Host    : {{ inventory_hostname }}
+          OS      : {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Arch    : {{ ansible_architecture }}
+          Python  : {{ ansible_python_version }}
+
+    - name: Ensure system packages are current
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_pkg_mgr == 'apt'
+
+  roles:
+    - docker
+    - caddy
+    - veil_deploy
+
+  post_tasks:
+    - name: Wait for VEIL API health
+      uri:
+        url: "http://localhost:8000/health"
+        method: GET
+        status_code: 200
+      register: health_result
+      until: health_result.status == 200
+      retries: 15
+      delay: 5
+
+    - name: ✅ Smoke test — API health
+      debug:
+        msg: |
+          🟢 VEIL API healthy!
+          Status  : {{ health_result.json.status }}
+          Version : {{ health_result.json.version }}
+          DB      : {{ health_result.json.database }}
+
+    - name: Display access URLs
+      debug:
+        msg: |
+          ═══════════════════════════════════════
+          🔒 VEIL Stack is LIVE!
+          ═══════════════════════════════════════
+          Frontend  : https://{{ ansible_default_ipv4.address }}
+          API       : http://{{ ansible_default_ipv4.address }}:8000
+          API Docs  : http://{{ ansible_default_ipv4.address }}:8000/docs
+          MinIO UI  : http://{{ ansible_default_ipv4.address }}:9998
+          Jenkins   : http://{{ ansible_default_ipv4.address }}:8080
+          ═══════════════════════════════════════
+
+# ─────────────────────────────────────────────────────────────
+# Role: docker — Install Docker CE + Compose plugin
+# ─────────────────────────────────────────────────────────────
+
+- name: 🐳 Install Docker CE
+  hosts: veil_servers
+  become: yes
+  tasks:
+    - name: Remove old Docker packages
+      apt:
+        name:
+          - docker
+          - docker-engine
+          - docker.io
+          - containerd
+          - runc
+        state: absent
+      ignore_errors: yes
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Install prerequisites
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+          - git
+          - make
+          - python3-pip
+        state: present
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Install Docker CE + Compose plugin
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+        state: present
+        update_cache: yes
+      when: ansible_pkg_mgr == 'apt'
+
+    - name: Add current user to docker group
+      user:
+        name: "{{ ansible_user }}"
+        groups: docker
+        append: yes
+
+    - name: Enable and start Docker service
+      systemd:
+        name: docker
+        enabled: yes
+        state: started
+
+    - name: Verify Docker installation
+      command: docker --version
+      register: docker_version
+      changed_when: false
+
+    - name: ✅ Docker installed
+      debug:
+        msg: "{{ docker_version.stdout }}"
+
+# ─────────────────────────────────────────────────────────────
+# Deploy VEIL
+# ─────────────────────────────────────────────────────────────
+
+- name: 🚀 Deploy VEIL Application
+  hosts: veil_servers
+  become: yes
+  vars:
+    veil_dir: /opt/veil
+    veil_repo: "{{ lookup('env', 'VEIL_REPO_URL') | default('https://github.com/YOUR_GITHUB_USERNAME/veil.git') }}"
+
+  tasks:
+    - name: Create VEIL directory
+      file:
+        path: "{{ veil_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: "0755"
+
+    - name: Clone or update VEIL repository
+      git:
+        repo: "{{ veil_repo }}"
+        dest: "{{ veil_dir }}"
+        version: main
+        force: yes
+      become_user: "{{ ansible_user }}"
+
+    - name: Generate .env from template
+      template:
+        src: templates/veil.env.j2
+        dest: "{{ veil_dir }}/.env"
+        owner: "{{ ansible_user }}"
+        mode: "0600"
+      when: lookup('file', veil_dir + '/.env', errors='ignore') == ''
+
+    - name: Copy .env.example if no custom env
+      copy:
+        src: "{{ veil_dir }}/.env.example"
+        dest: "{{ veil_dir }}/.env"
+        remote_src: yes
+        owner: "{{ ansible_user }}"
+        mode: "0600"
+        force: no
+
+    - name: Pull and start VEIL services
+      community.docker.docker_compose_v2:
+        project_src: "{{ veil_dir }}"
+        state: present
+        pull: policy
+        build: policy
+      become_user: "{{ ansible_user }}"
+
+    - name: Configure UFW firewall
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - "22"
+        - "80"
+        - "443"
+        - "8000"
+        - "9998"
+      ignore_errors: yes
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+      ignore_errors: yes

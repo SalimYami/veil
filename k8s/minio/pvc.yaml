@@ -1,0 +1,17 @@
+# ═══════════════════════════════════════════════════
+# Veil — MinIO PersistentVolumeClaim
+# ═══════════════════════════════════════════════════
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: veil-minio-pvc
+  namespace: veil
+  labels:
+    app: veil
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

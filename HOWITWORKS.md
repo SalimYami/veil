@@ -78,14 +78,14 @@ Le serveur ne peut **JAMAIS** :
                                       │
                          ┌────────────┴────────────┐
                          ▼                         ▼
-          ┌──────────────────────┐   ┌──────────────────────┐
-          │      AUTH KEY        │   │   ENCRYPTION KEY     │
-          │   (256 bits)         │   │   (256 bits)         │
-          │                      │   │                      │
-          │ → Hashée et envoyée  │   │ → JAMAIS envoyée !   │
-          │   au serveur pour    │   │   Reste dans le      │
-          │   s'authentifier     │   │   navigateur (RAM)   │
-          └──────────────────────┘   └──────────────────────┘
+           ┌──────────────────────┐   ┌──────────────────────┐
+           │      AUTH KEY        │   │   ENCRYPTION KEY     │
+           │   (256 bits)         │   │   (256 bits)         │
+           │                      │   │                      │
+           │ → Hashée et envoyée  │   │ → JAMAIS envoyée !   │
+           │   au serveur pour    │   │   Reste dans le      │
+           │   s'authentifier     │   │   navigateur (RAM)   │
+           └──────────────────────┘   └──────────────────────┘
 ```
 
 ---

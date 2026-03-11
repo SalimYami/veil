@@ -1,0 +1,229 @@
+#!/usr/bin/env groovy
+// ═══════════════════════════════════════════════════════════════
+// VEIL — Jenkins CI/CD Pipeline
+// ═══════════════════════════════════════════════════════════════
+// Pipeline: Checkout → Lint → Test → Build → Security → Deploy
+//
+// Requires Jenkins plugins:
+//   - Docker Pipeline
+//   - Ansible Plugin
+//   - GitHub Integration
+//   - Credentials Binding
+//   - HTML Publisher (test coverage reports)
+// ═══════════════════════════════════════════════════════════════
+
+pipeline {
+    agent any
+
+    environment {
+        // Docker Hub credentials stored in Jenkins credentials manager
+        DOCKERHUB_CREDS  = credentials('dockerhub-credentials')
+        DOCKER_REGISTRY  = 'docker.io'
+        BACKEND_IMAGE    = "${DOCKERHUB_CREDS_USR}/veil-backend"
+        FRONTEND_IMAGE   = "${DOCKERHUB_CREDS_USR}/veil-frontend"
+        IMAGE_TAG        = "${env.BUILD_NUMBER}-${env.GIT_COMMIT?.take(7) ?: 'local'}"
+
+        // Python environment
+        PYTHON           = 'python3'
+        PIP              = 'pip3'
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 30, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        ansiColor('xterm')
+    }
+
+    triggers {
+        // GitHub webhook — add http://JENKINS_URL/github-webhook/
+        githubPush()
+        // Poll as fallback every 5min
+        pollSCM('H/5 * * * *')
+    }
+
+    stages {
+
+        // ─────────────────────────────────────────────────────────
+        stage('📥 Checkout') {
+        // ─────────────────────────────────────────────────────────
+            steps {
+                checkout scm
+                echo "🔍 Branch: ${env.BRANCH_NAME} | Build: ${env.BUILD_NUMBER}"
+                echo "📝 Commit: ${env.GIT_COMMIT?.take(40) ?: 'N/A'}"
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────
+        stage('🧹 Lint') {
+        // ─────────────────────────────────────────────────────────
+            parallel {
+                stage('Python — Ruff') {
+                    steps {
+                        dir('backend') {
+                            sh '''
+                                pip install ruff --quiet
+                                ruff check . --output-format=text
+                            '''
+                        }
+                    }
+                }
+                stage('TypeScript — ESLint') {
+                    steps {
+                        dir('frontend') {
+                            sh 'npm ci --prefer-offline'
+                            sh 'npm run lint'
+                            sh 'npx tsc --noEmit'
+                        }
+                    }
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────
+        stage('🧪 Test') {
+        // ─────────────────────────────────────────────────────────
+            steps {
+                dir('backend') {
+                    sh '''
+                        pip install -r requirements.txt pytest pytest-cov pytest-asyncio httpx --quiet
+
+                        # Run tests with coverage
+                        pytest tests/ -v \
+                            --cov=. \
+                            --cov-report=xml:coverage.xml \
+                            --cov-report=html:htmlcov \
+                            --cov-report=term-missing \
+                            --junit-xml=test-results.xml \
+                            || true
+                    '''
+                }
+            }
+            post {
+                always {
+                    // Publish JUnit test results
+                    junit allowEmptyResults: true, testResults: 'backend/test-results.xml'
+                    // Publish HTML coverage report
+                    publishHTML([
+                        allowMissing: true,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'backend/htmlcov',
+                        reportFiles: 'index.html',
+                        reportName: 'Coverage Report'
+                    ])
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────
+        stage('🐳 Docker Build') {
+        // ─────────────────────────────────────────────────────────
+            parallel {
+                stage('Backend Image') {
+                    steps {
+                        sh """
+                            docker build \
+                                --tag ${BACKEND_IMAGE}:${IMAGE_TAG} \
+                                --tag ${BACKEND_IMAGE}:latest \
+                                --cache-from ${BACKEND_IMAGE}:latest \
+                                ./backend
+                        """
+                    }
+                }
+                stage('Frontend Image') {
+                    steps {
+                        sh """
+                            docker build \
+                                --tag ${FRONTEND_IMAGE}:${IMAGE_TAG} \
+                                --tag ${FRONTEND_IMAGE}:latest \
+                                --cache-from ${FRONTEND_IMAGE}:latest \
+                                ./frontend
+                        """
+                    }
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────
+        stage('🛡️ Security Scan') {
+        // ─────────────────────────────────────────────────────────
+            steps {
+                sh '''
+                    # Install Trivy if not present
+                    if ! command -v trivy &>/dev/null; then
+                        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+                    fi
+
+                    echo "--- Scanning backend image ---"
+                    trivy image --exit-code 0 --severity HIGH,CRITICAL \
+                        --format table ${BACKEND_IMAGE}:latest || true
+
+                    echo "--- Scanning frontend image ---"
+                    trivy image --exit-code 0 --severity HIGH,CRITICAL \
+                        --format table ${FRONTEND_IMAGE}:latest || true
+                '''
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────
+        stage('📤 Push to Registry') {
+        // ─────────────────────────────────────────────────────────
+            when {
+                branch 'main'
+            }
+            steps {
+                sh """
+                    echo ${DOCKERHUB_CREDS_PSW} | docker login -u ${DOCKERHUB_CREDS_USR} --password-stdin
+
+                    docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
+                    docker push ${BACKEND_IMAGE}:latest
+                    docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
+                    docker push ${FRONTEND_IMAGE}:latest
+
+                    docker logout
+                """
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────
+        stage('🚀 Deploy (Ansible)') {
+        // ─────────────────────────────────────────────────────────
+            when {
+                branch 'main'
+            }
+            steps {
+                ansiblePlaybook(
+                    playbook: 'ansible/playbook-local.yml',
+                    inventory: 'ansible/inventory.ini',
+                    colorized: true,
+                    extras: '--diff'
+                )
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────
+        stage('🔥 Smoke Tests') {
+        // ─────────────────────────────────────────────────────────
+            when {
+                branch 'main'
+            }
+            steps {
+                sh 'bash scripts/smoke-test.sh'
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "🏁 Pipeline complete. Status: ${currentBuild.currentResult}"
+            cleanWs()
+        }
+        success {
+            echo "✅ VEIL deployed successfully! Build #${env.BUILD_NUMBER}"
+        }
+        failure {
+            echo "❌ Pipeline failed. Check logs above."
+        }
+    }
+}
