@@ -6,7 +6,6 @@ Handles registration, login, token refresh, and role management.
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
 
 from passlib.context import CryptContext
 from jose import JWTError, jwt

@@ -64,7 +64,7 @@ export function FileList() {
         try {
             const data = await getFilePreview(token, fileId);
             setPreviewData(data);
-        } catch (err) {
+        } catch {
             addToast("Erreur lors de la récupération de l'aperçu chiffré", 'error');
         } finally {
             setIsPreviewLoading(false);

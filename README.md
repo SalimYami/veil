@@ -7,17 +7,17 @@
 > **Your secrets, invisible to the cloud.**  
 > The server is **blind** — it never sees your files, your keys, or your password.
 
-[![CI](https://github.com/YOUR_GITHUB_USERNAME/veil/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USERNAME/veil/actions/workflows/ci.yml)
-[![Docker](https://github.com/YOUR_GITHUB_USERNAME/veil/actions/workflows/docker.yml/badge.svg)](https://github.com/YOUR_GITHUB_USERNAME/veil/actions/workflows/docker.yml)
-[![Trivy Security](https://img.shields.io/badge/Security-Trivy%20Scanned-22c55e?logo=shield&logoColor=white)](https://github.com/YOUR_GITHUB_USERNAME/veil/actions)
+[![CI](https://github.com/SalimYami/veil/actions/workflows/ci.yml/badge.svg)](https://github.com/SalimYami/veil/actions/workflows/ci.yml)
+[![Docker](https://github.com/SalimYami/veil/actions/workflows/docker.yml/badge.svg)](https://github.com/SalimYami/veil/actions/workflows/docker.yml)
+[![Trivy Security](https://img.shields.io/badge/Security-Trivy%20Scanned-22c55e?logo=shield&logoColor=white)](https://github.com/SalimYami/veil/actions)
 [![Coverage](https://img.shields.io/badge/Coverage-87%25-22c55e?logo=pytest&logoColor=white)](#testing)
 [![Python](https://img.shields.io/badge/Python-3.12-3776ab?logo=python&logoColor=white)](https://python.org)
 [![React](https://img.shields.io/badge/React-19-61dafb?logo=react&logoColor=black)](https://react.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/License-MIT-f59e0b?logo=open-source-initiative&logoColor=white)](LICENSE)
-[![Docker Pulls](https://img.shields.io/docker/pulls/YOUR_DOCKERHUB/veil-backend?logo=docker&logoColor=white)](https://hub.docker.com/r/YOUR_DOCKERHUB/veil-backend)
+[![Docker Pulls](https://img.shields.io/docker/pulls/salimyami/veil-backend?logo=docker&logoColor=white)](https://hub.docker.com/r/salimyami/veil-backend)
 
-[**Live Demo**](https://veil.onrender.com) · [**API Docs**](https://veil.onrender.com/docs) · [**Jenkins CI**](#jenkins) · [**Ansible Deploy**](#ansible)
+[**Live Demo**](https://veil-api.onrender.com/docs) · [**API Docs**](https://veil-api.onrender.com/docs) · [**Jenkins CI**](#jenkins) · [**Ansible Deploy**](#ansible)
 
 </div>
 
@@ -224,7 +224,7 @@ ansible-playbook ansible/playbook-local.yml -i ansible/inventory.ini -K
 
 ### Deploy to Render (1-click)
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/YOUR_GITHUB_USERNAME/veil)
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/SalimYami/veil)
 
 ---
 

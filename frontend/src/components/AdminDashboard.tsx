@@ -46,6 +46,7 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
             setStats(statsData);
             setStorage(storageData.files);
             setError(null);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (err: any) {
             setError("Erreur lors de la récupération des données admin");
             console.error(err);
@@ -56,6 +57,7 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
 
     useEffect(() => {
         fetchData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const formatSize = (bytes: number) => {

@@ -85,6 +85,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 role: response.role || 'user',
                 encryptionKey: encryptionKey,
             });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             set({
                 isLoading: false,
@@ -114,6 +115,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 role: response.role || 'user',
                 encryptionKey: encryptionKey,
             });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             set({
                 isLoading: false,
@@ -149,6 +151,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         try {
             const { role } = await api.promoteToAdmin(token, secretKey);
             set({ role, isLoading: false });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             set({
                 isLoading: false,

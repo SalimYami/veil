@@ -6,10 +6,9 @@ Handles all database interactions for file management.
 import logging
 from typing import Optional, List
 from datetime import datetime
-import uuid
 
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
+from sqlalchemy import func
 
 from database.models import File
 

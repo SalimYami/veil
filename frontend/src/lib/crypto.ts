@@ -263,7 +263,7 @@ export async function decryptFile(
     console.log(`✅ Fichier déchiffré: ${(ciphertext as ArrayBuffer).byteLength} bytes → ${(decrypted as ArrayBuffer).byteLength} bytes`);
     return decrypted as ArrayBuffer;
 
-  } catch (error) {
+  } catch {
     // Si le déchiffrement échoue, c'est que les données sont corrompues
     // ou que la clé est incorrecte
     console.error('❌ Échec du déchiffrement - données corrompues ou clé incorrecte');

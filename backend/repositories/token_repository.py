@@ -4,8 +4,7 @@ Handles all database interactions for JWT refresh token management.
 """
 
 import logging
-from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext

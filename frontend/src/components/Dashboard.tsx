@@ -31,7 +31,7 @@ export function Dashboard() {
             await promote(adminKey);
             setShowPromoteModal(false);
             setAdminKey('');
-        } catch (err) {
+        } catch {
             // Error handled by store
         }
     };

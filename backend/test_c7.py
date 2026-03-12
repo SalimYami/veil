@@ -1,6 +1,5 @@
 import requests
 import json
-import os
 
 API_KEY = "ctx7sk-ecaeadea-1ff3-4fc5-99b6-223523ab567b"
 URL = "https://mcp.context7.com/mcp"

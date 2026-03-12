@@ -115,6 +115,7 @@ export const useFileStore = create<FileState>((set, get) => ({
             // Extract all unique tags
             const allTags = [...new Set(files.flatMap(f => f.tags || []))];
             set({ files: files || [], allTags: allTags || [], isLoading: false });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             set({
                 isLoading: false,
@@ -184,6 +185,7 @@ export const useFileStore = create<FileState>((set, get) => ({
                 queue[i].progress = 100;
                 set({ uploadQueue: [...queue], uploadProgress: Math.round(((i + 1) / queue.length) * 100) });
 
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } catch (error: any) {
                 queue[i].status = 'error';
                 queue[i].error = error.response?.data?.detail || 'Erreur';
@@ -253,6 +255,7 @@ export const useFileStore = create<FileState>((set, get) => ({
             set({ isLoading: false });
             await get().fetchActivity();
 
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             set({
                 isLoading: false,
@@ -277,6 +280,7 @@ export const useFileStore = create<FileState>((set, get) => ({
             await get().fetchActivity();
             get().addToast('Fichier supprimé définitivement', 'info');
             set({ isLoading: false });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
             set({
                 isLoading: false,
@@ -298,7 +302,7 @@ export const useFileStore = create<FileState>((set, get) => ({
             await get().fetchFiles();
             await get().fetchActivity();
             get().addToast('Tags mis à jour', 'success');
-        } catch (error: any) {
+        } catch {
             get().addToast('Erreur lors de la mise à jour des tags', 'error');
         }
     },
