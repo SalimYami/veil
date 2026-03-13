@@ -3,7 +3,11 @@ Pytest configuration and fixtures for VEIL backend tests.
 Uses SQLite in-memory DB to avoid requiring a real PostgreSQL instance.
 """
 import os
+import sys
 import pytest
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from fastapi.testclient import TestClient
 
 # ── Override environment before importing main ─────────────────────────────
@@ -42,8 +46,16 @@ def client():
         MockMinio.return_value.delete_object.return_value = True
 
         from main import app
+        from database.connection import Base, get_engine
+        
+        # Create tables for tests
+        Base.metadata.create_all(bind=get_engine())
+        
         with TestClient(app) as c:
             yield c
+            
+        # Teardown tables
+        Base.metadata.drop_all(bind=get_engine())
 
 
 @pytest.fixture(scope="module")

@@ -25,6 +25,7 @@ Le serveur ne voit JAMAIS les données en clair !
 """
 
 import os
+import uuid
 import logging
 import time
 import traceback
@@ -216,7 +217,7 @@ class Token(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
-    user_id: str
+    user_id: uuid.UUID
     role: str = "user"
     expires_in: int
 
@@ -249,19 +250,17 @@ class UploadConfirmRequest(BaseModel):
 
 class FileMetadata(BaseModel):
     """File metadata response."""
-    id: str
+    id: uuid.UUID
     name: str
     iv: str
     auth_tag: str
     size: int
-    mime_type: Optional[str]
-    tags: list = []
+    mime_type: Optional[str] = None
+    tags: List[str] = []
     created_at: datetime
-    
+
     class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+        from_attributes = True
 
 
 class TagUpdate(BaseModel):
@@ -347,7 +346,7 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
                 )
             
             return {
-                "id": str(user.id),
+                "id": user.id,
                 "email": user.email,
                 "role": user.role
             }

@@ -19,7 +19,8 @@ class TestRegister:
             "email": TEST_EMAIL,
             "auth_hash": VALID_HASH
         })
-        # 201 created or 400 if already exists (idempotent re-runs)
+        if resp.status_code == 500:
+            print("ERROR 500:", resp.text)
         assert resp.status_code in (201, 400)
 
     def test_register_returns_tokens(self, client):

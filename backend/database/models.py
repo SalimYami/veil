@@ -4,8 +4,7 @@ These models map to the PostgreSQL schema.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Text, Uuid, JSON
 from sqlalchemy.orm import relationship
 import uuid
 
@@ -16,7 +15,7 @@ class User(Base):
     """User account model."""
     __tablename__ = "users"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     auth_hash = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default="user")
@@ -36,15 +35,15 @@ class File(Base):
     """File metadata model (NO plaintext content!)."""
     __tablename__ = "files"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     object_key = Column(String(255), unique=True, nullable=False, index=True)
     file_name = Column(String(255), nullable=False)
     iv = Column(String(255), nullable=False)  # Initialization vector (base64)
     auth_tag = Column(String(255), nullable=False)  # AES-GCM auth tag (base64)
     file_size = Column(BigInteger, nullable=False)
     mime_type = Column(String(100))
-    tags = Column(JSONB, default=list)
+    tags = Column(JSON, default=list)
     status = Column(String(50), nullable=False, default="pending")  # 'pending' or 'uploaded'
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -60,8 +59,8 @@ class RefreshToken(Base):
     """Refresh token model for JWT session management."""
     __tablename__ = "refresh_tokens"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash = Column(String(255), nullable=False)
     expires_at = Column(DateTime, nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
@@ -77,10 +76,10 @@ class ActivityLog(Base):
     """Activity log model for audit trail."""
     __tablename__ = "activity_log"
     
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     action = Column(String(50), nullable=False)
-    file_id = Column(UUID(as_uuid=True), nullable=True)
+    file_id = Column(Uuid(as_uuid=True), nullable=True)
     file_name = Column(String(255))
     details = Column(Text)
     timestamp = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)

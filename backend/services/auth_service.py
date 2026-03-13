@@ -78,7 +78,7 @@ class AuthService:
             
             # Store refresh token
             expires_at = datetime.utcnow() + timedelta(days=self.refresh_token_expire_days)
-            TokenRepository.store_refresh_token(db, str(user.id), refresh_token, expires_at)
+            TokenRepository.store_refresh_token(db, user.id, refresh_token, expires_at)
             
             logger.info(f"User registered: {email}")
             
@@ -125,7 +125,7 @@ class AuthService:
             
             # Store refresh token
             expires_at = datetime.utcnow() + timedelta(days=self.refresh_token_expire_days)
-            TokenRepository.store_refresh_token(db, str(user.id), refresh_token, expires_at)
+            TokenRepository.store_refresh_token(db, user.id, refresh_token, expires_at)
             
             logger.info(f"User logged in: {email}")
             
@@ -186,7 +186,7 @@ class AuthService:
                     "access_token": new_access_token,
                     "refresh_token": refresh_token,  # Keep same refresh token
                     "token_type": "bearer",
-                    "user_id": str(user.id),
+                    "user_id": user.id,
                     "role": user.role,
                     "expires_in": self.access_token_expire_minutes * 60
                 }
