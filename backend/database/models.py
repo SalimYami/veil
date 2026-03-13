@@ -3,7 +3,7 @@ SQLAlchemy ORM models for Veil database.
 These models map to the PostgreSQL schema.
 """
 
-from datetime import datetime
+from datetime import datetime, UTC
 from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Text, Uuid, JSON
 from sqlalchemy.orm import relationship
 import uuid
@@ -19,8 +19,8 @@ class User(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     auth_hash = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default="user")
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
     
     # Relationships
     files = relationship("File", back_populates="user", cascade="all, delete-orphan")
@@ -45,8 +45,8 @@ class File(Base):
     mime_type = Column(String(100))
     tags = Column(JSON, default=list)
     status = Column(String(50), nullable=False, default="pending")  # 'pending' or 'uploaded'
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True)
+    updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
     
     # Relationships
     user = relationship("User", back_populates="files")
@@ -63,7 +63,7 @@ class RefreshToken(Base):
     user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash = Column(String(255), nullable=False)
     expires_at = Column(DateTime, nullable=False, index=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     
     # Relationships
     user = relationship("User", back_populates="refresh_tokens")
@@ -82,7 +82,7 @@ class ActivityLog(Base):
     file_id = Column(Uuid(as_uuid=True), nullable=True)
     file_name = Column(String(255))
     details = Column(Text)
-    timestamp = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True)
     
     # Relationships
     user = relationship("User", back_populates="activity_logs")

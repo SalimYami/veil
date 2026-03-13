@@ -4,8 +4,8 @@ Handles all database interactions for user management.
 """
 
 import logging
-from typing import Optional
-from datetime import datetime
+from typing import Optional, Any
+from datetime import datetime, UTC
 
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -65,7 +65,7 @@ class UserRepository:
         return db.query(User).filter(User.email == email).first()
     
     @staticmethod
-    def get_user_by_id(db: Session, user_id: str) -> Optional[User]:
+    def get_user_by_id(db: Session, user_id: Any) -> Optional[User]:
         """
         Get user by ID.
         
@@ -79,7 +79,7 @@ class UserRepository:
         return db.query(User).filter(User.id == user_id).first()
     
     @staticmethod
-    def update_user_role(db: Session, user_id: str, role: str) -> bool:
+    def update_user_role(db: Session, user_id: Any, role: str) -> bool:
         """
         Update user role.
         
@@ -96,7 +96,7 @@ class UserRepository:
             return False
         
         user.role = role
-        user.updated_at = datetime.utcnow()
+        user.updated_at = datetime.now(UTC)
         db.flush()
         
         logger.info(f"User role updated: {user.email} -> {role}")

@@ -4,7 +4,8 @@ Handles all database interactions for JWT refresh token management.
 """
 
 import logging
-from datetime import datetime
+from typing import Any
+from datetime import datetime, UTC
 
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
@@ -23,7 +24,7 @@ class TokenRepository:
     @staticmethod
     def store_refresh_token(
         db: Session,
-        user_id: str,
+        user_id: Any,
         token: str,
         expires_at: datetime
     ) -> RefreshToken:
@@ -57,7 +58,7 @@ class TokenRepository:
         return refresh_token
     
     @staticmethod
-    def verify_refresh_token(db: Session, user_id: str, token: str) -> bool:
+    def verify_refresh_token(db: Session, user_id: Any, token: str) -> bool:
         """
         Verify if a refresh token is valid.
         
@@ -72,7 +73,7 @@ class TokenRepository:
         # Get all non-expired tokens for user
         tokens = db.query(RefreshToken)\
             .filter(RefreshToken.user_id == user_id)\
-            .filter(RefreshToken.expires_at > datetime.utcnow())\
+            .filter(RefreshToken.expires_at > datetime.now(UTC))\
             .all()
         
         # Check if any token matches
@@ -85,7 +86,7 @@ class TokenRepository:
         return False
     
     @staticmethod
-    def revoke_user_tokens(db: Session, user_id: str) -> int:
+    def revoke_user_tokens(db: Session, user_id: Any) -> int:
         """
         Revoke all refresh tokens for a user.
         
@@ -117,7 +118,7 @@ class TokenRepository:
             Number of tokens deleted
         """
         count = db.query(RefreshToken)\
-            .filter(RefreshToken.expires_at < datetime.utcnow())\
+            .filter(RefreshToken.expires_at < datetime.now(UTC))\
             .delete()
         
         db.flush()

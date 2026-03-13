@@ -4,8 +4,8 @@ Handles all database interactions for file management.
 """
 
 import logging
-from typing import Optional, List
-from datetime import datetime
+from typing import Optional, List, Any
+from datetime import datetime, UTC
 
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -66,7 +66,7 @@ class FileRepository:
         return file_meta
     
     @staticmethod
-    def get_user_files(db: Session, user_id: str) -> List[File]:
+    def get_user_files(db: Session, user_id: Any) -> List[File]:
         """
         Get all files for a user.
         
@@ -84,7 +84,7 @@ class FileRepository:
             .all()
     
     @staticmethod
-    def get_file_by_id(db: Session, file_id: str) -> Optional[File]:
+    def get_file_by_id(db: Session, file_id: Any) -> Optional[File]:
         """
         Get file by ID.
         
@@ -129,7 +129,7 @@ class FileRepository:
             return False
         
         file_meta.status = status
-        file_meta.updated_at = datetime.utcnow()
+        file_meta.updated_at = datetime.now(UTC)
         db.flush()
         
         logger.info(f"File status updated: {file_meta.file_name} -> {status}")
@@ -153,7 +153,7 @@ class FileRepository:
             return False
         
         file_meta.tags = tags
-        file_meta.updated_at = datetime.utcnow()
+        file_meta.updated_at = datetime.now(UTC)
         db.flush()
         
         logger.info(f"File tags updated: {file_meta.file_name} -> {tags}")

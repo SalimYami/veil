@@ -30,13 +30,14 @@ import logging
 import time
 import traceback
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Any
+from contextlib import asynccontextmanager
 
 # --- FastAPI & Dependencies ---
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict, field_serializer
 from starlette.middleware.base import BaseHTTPMiddleware
 from jose import JWTError, jwt
 
@@ -188,7 +189,8 @@ class UserRegister(BaseModel):
     email: EmailStr
     auth_hash: str = Field(..., min_length=64, max_length=128)
     
-    @validator('auth_hash')
+    @field_validator('auth_hash')
+    @classmethod
     def validate_hash(cls, v):
         if not all(c in '0123456789abcdefABCDEF' for c in v):
             raise ValueError("auth_hash must be a valid hexadecimal hash")
@@ -200,7 +202,8 @@ class UserLogin(BaseModel):
     email: EmailStr
     auth_hash: str = Field(..., min_length=64, max_length=128)
     
-    @validator('auth_hash')
+    @field_validator('auth_hash')
+    @classmethod
     def validate_hash(cls, v):
         if not all(c in '0123456789abcdefABCDEF' for c in v):
             raise ValueError("auth_hash must be a valid hexadecimal hash")
@@ -235,7 +238,8 @@ class UploadInitRequest(BaseModel):
     file_size: int = Field(..., ge=0, le=MAX_FILE_SIZE)
     mime_type: Optional[str] = None
     
-    @validator('file_name')
+    @field_validator('file_name')
+    @classmethod
     def validate_filename(cls, v):
         forbidden = ['/', '\\', '..', '\0']
         if any(char in v for char in forbidden):
@@ -259,8 +263,9 @@ class FileMetadata(BaseModel):
     tags: List[str] = []
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TagUpdate(BaseModel):
@@ -276,10 +281,9 @@ class ActivityEntry(BaseModel):
     timestamp: datetime
     details: str = ""
     
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    @field_serializer('timestamp')
+    def serialize_dt(self, dt: datetime, _info):
+        return dt.isoformat()
 
 
 class UserStats(BaseModel):
@@ -291,10 +295,9 @@ class UserStats(BaseModel):
     newest_file: Optional[datetime] = None
     average_file_size_mb: float
     
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat() if v else None
-        }
+    @field_serializer('oldest_file', 'newest_file')
+    def serialize_dt(self, dt: Optional[datetime], _info):
+        return dt.isoformat() if dt else None
 
 
 # =============================================================================
@@ -337,7 +340,15 @@ def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
         
         # Get user from database
         with get_db() as db:
-            user = UserRepository.get_user_by_id(db, user_id)
+            try:
+                uid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
+                user = UserRepository.get_user_by_id(db, uid)
+            except ValueError:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Invalid token subject",
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
             if not user:
                 raise HTTPException(
                     status_code=401,
@@ -369,6 +380,24 @@ def get_admin_user(current_user: dict = Depends(get_current_user)):
             detail="Admin privileges required"
         )
     return current_user
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle events for the application."""
+    # Startup
+    logger.info("🚀 VEIL API starting up...")
+    logger.info(f"📊 Database: {DATABASE_URL.split('@')[-1]}")
+    logger.info(f"💾 MinIO: {MINIO_ENDPOINT} (bucket: {MINIO_BUCKET})")
+    logger.info("✅ Application ready")
+    
+    yield
+    
+    # Shutdown
+    logger.info("👋 VEIL API shutting down...")
+    from database.connection import close_db
+    close_db()
+    logger.info("✅ Shutdown complete")
 
 
 # =============================================================================
@@ -408,6 +437,7 @@ app = FastAPI(
     license_info={
         "name": "MIT",
     },
+    lifespan=lifespan
 )
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -826,22 +856,10 @@ async def admin_stats(admin: dict = Depends(get_admin_user)):
 # STARTUP/SHUTDOWN EVENTS
 # =============================================================================
 
-@app.on_event("startup")
-async def startup_event():
-    """Run on application startup."""
-    logger.info("🚀 VEIL API starting up...")
-    logger.info(f"📊 Database: {DATABASE_URL.split('@')[-1]}")
-    logger.info(f"💾 MinIO: {MINIO_ENDPOINT} (bucket: {MINIO_BUCKET})")
-    logger.info("✅ Application ready")
+# =============================================================================
+# MAIN
+# =============================================================================
 
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Run on application shutdown."""
-    logger.info("👋 VEIL API shutting down...")
-    from database.connection import close_db
-    close_db()
-    logger.info("✅ Shutdown complete")
 
 
 # =============================================================================

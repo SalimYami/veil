@@ -4,8 +4,8 @@ Handles all database interactions for user activity tracking.
 """
 
 import logging
-from typing import List, Optional
-from datetime import datetime
+from typing import List, Optional, Any
+from datetime import datetime, UTC
 
 from sqlalchemy.orm import Session
 
@@ -20,10 +20,10 @@ class ActivityRepository:
     @staticmethod
     def log_activity(
         db: Session,
-        user_id: str,
+        user_id: Any,
         action: str,
         file_name: str,
-        file_id: Optional[str] = None,
+        file_id: Optional[Any] = None,
         details: str = ""
     ) -> ActivityLog:
         """
@@ -46,7 +46,7 @@ class ActivityRepository:
             file_id=file_id,
             file_name=file_name,
             details=details,
-            timestamp=datetime.utcnow()
+            timestamp=datetime.now(UTC)
         )
         
         db.add(activity)
@@ -57,7 +57,7 @@ class ActivityRepository:
     @staticmethod
     def get_user_activity(
         db: Session,
-        user_id: str,
+        user_id: Any,
         limit: int = 100
     ) -> List[ActivityLog]:
         """

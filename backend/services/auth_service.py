@@ -5,7 +5,7 @@ Handles registration, login, token refresh, and role management.
 
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 from passlib.context import CryptContext
 from jose import JWTError, jwt
@@ -77,7 +77,7 @@ class AuthService:
             refresh_token = self._create_refresh_token(user.id)
             
             # Store refresh token
-            expires_at = datetime.utcnow() + timedelta(days=self.refresh_token_expire_days)
+            expires_at = datetime.now(UTC) + timedelta(days=self.refresh_token_expire_days)
             TokenRepository.store_refresh_token(db, user.id, refresh_token, expires_at)
             
             logger.info(f"User registered: {email}")
@@ -124,7 +124,7 @@ class AuthService:
             refresh_token = self._create_refresh_token(user.id)
             
             # Store refresh token
-            expires_at = datetime.utcnow() + timedelta(days=self.refresh_token_expire_days)
+            expires_at = datetime.now(UTC) + timedelta(days=self.refresh_token_expire_days)
             TokenRepository.store_refresh_token(db, user.id, refresh_token, expires_at)
             
             logger.info(f"User logged in: {email}")
@@ -163,17 +163,19 @@ class AuthService:
             if payload.get("type") != "refresh":
                 raise ValueError("Invalid token type")
             
-            user_id = payload.get("sub")
-            if not user_id:
+            user_id_str = payload.get("sub")
+            if not user_id_str:
                 raise ValueError("Invalid token")
+            
+            try:
+                user_id = uuid.UUID(user_id_str) if isinstance(user_id_str, str) else user_id_str
+            except ValueError:
+                raise ValueError("Invalid token subject format")
             
             with get_db() as db:
                 # Verify token is in database and not revoked
                 if not TokenRepository.verify_refresh_token(db, user_id, refresh_token):
                     raise ValueError("Token revoked or invalid")
-                
-                # Get user
-                user = UserRepository.get_user_by_id(db, user_id)
                 if not user:
                     raise ValueError("User not found")
                 
@@ -232,22 +234,22 @@ class AuthService:
     
     def _create_access_token(self, user_id: uuid.UUID) -> str:
         """Create access token JWT."""
-        expire = datetime.utcnow() + timedelta(minutes=self.access_token_expire_minutes)
+        expire = datetime.now(UTC) + timedelta(minutes=self.access_token_expire_minutes)
         to_encode = {
             "sub": str(user_id),
             "exp": expire,
-            "iat": datetime.utcnow(),
+            "iat": datetime.now(UTC),
             "type": "access"
         }
         return jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
     
     def _create_refresh_token(self, user_id: uuid.UUID) -> str:
         """Create refresh token JWT."""
-        expire = datetime.utcnow() + timedelta(days=self.refresh_token_expire_days)
+        expire = datetime.now(UTC) + timedelta(days=self.refresh_token_expire_days)
         to_encode = {
             "sub": str(user_id),
             "exp": expire,
-            "iat": datetime.utcnow(),
+            "iat": datetime.now(UTC),
             "type": "refresh"
         }
         return jwt.encode(to_encode, self.refresh_secret_key, algorithm=self.algorithm)
