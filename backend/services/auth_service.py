@@ -165,14 +165,21 @@ class AuthService:
             
             user_id_str = payload.get("sub")
             if not user_id_str:
-                raise ValueError("Invalid token")
+                logger.error("User ID not found in payload")
+                raise ValueError("Invalid refresh token payload")
             
             try:
-                user_id = uuid.UUID(user_id_str) if isinstance(user_id_str, str) else user_id_str
+                user_id = uuid.UUID(user_id_str)
             except ValueError:
                 raise ValueError("Invalid token subject format")
             
             with get_db() as db:
+                # Fetch user first
+                user = UserRepository.get_user_by_id(db, user_id)
+                if not user:
+                    logger.error(f"User with ID {user_id} not found")
+                    raise ValueError("User not found")
+                
                 # Verify token is in database and not revoked
                 if not TokenRepository.verify_refresh_token(db, user_id, refresh_token):
                     raise ValueError("Token revoked or invalid")

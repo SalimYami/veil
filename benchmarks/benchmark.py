@@ -13,9 +13,7 @@ Usage:
 
 import argparse
 import os
-import sys
 import time
-import hashlib
 from typing import List
 
 # Third-party
@@ -27,7 +25,6 @@ except ImportError:
     print("⚠️  pip install cryptography")
 
 try:
-    from argon2 import PasswordHasher
     from argon2.low_level import hash_secret_raw, Type
     HAS_ARGON2 = True
 except ImportError:
