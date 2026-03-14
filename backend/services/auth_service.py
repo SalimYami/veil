@@ -244,8 +244,8 @@ class AuthService:
         expire = datetime.now(UTC) + timedelta(minutes=self.access_token_expire_minutes)
         to_encode = {
             "sub": str(user_id),
-            "exp": expire,
-            "iat": datetime.now(UTC),
+            "exp": int(expire.timestamp()),
+            "iat": int(datetime.now(UTC).timestamp()),
             "type": "access"
         }
         return jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
@@ -255,8 +255,8 @@ class AuthService:
         expire = datetime.now(UTC) + timedelta(days=self.refresh_token_expire_days)
         to_encode = {
             "sub": str(user_id),
-            "exp": expire,
-            "iat": datetime.now(UTC),
+            "exp": int(expire.timestamp()),
+            "iat": int(datetime.now(UTC).timestamp()),
             "type": "refresh"
         }
         return jwt.encode(to_encode, self.refresh_secret_key, algorithm=self.algorithm)

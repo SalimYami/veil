@@ -9,6 +9,7 @@ import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from fastapi.testclient import TestClient
+from httpx import ASGITransport
 
 # ── Override environment before importing main ─────────────────────────────
 os.environ.update({
@@ -51,6 +52,7 @@ def client():
         # Create tables for tests
         Base.metadata.create_all(bind=get_engine())
         
+        from fastapi.testclient import TestClient
         with TestClient(app) as c:
             yield c
             
@@ -82,3 +84,13 @@ def auth_headers(registered_user):
     """Return Authorization headers for authenticated requests."""
     token = registered_user.get("access_token", "")
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def authorized_client(client, auth_headers):
+    """Test client with Authorization header pre-set."""
+    client.headers.update(auth_headers)
+    yield client
+    # Restore headers to avoid affecting other tests if they share the same client
+    if "Authorization" in client.headers:
+        del client.headers["Authorization"]

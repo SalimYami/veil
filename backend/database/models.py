@@ -8,14 +8,47 @@ from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Text, U
 from sqlalchemy.orm import relationship
 import uuid
 
+from sqlalchemy.types import TypeDecorator, CHAR
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+
 from .connection import Base
+
+
+class GUID(TypeDecorator):
+    """Platform-independent GUID type.
+    Uses PostgreSQL's UUID type, otherwise uses
+    CHAR(32), storing as stringified hex values.
+    """
+    impl = CHAR
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(PG_UUID())
+        else:
+            return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        if dialect.name == 'postgresql':
+            return str(value)
+        else:
+            return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        if not isinstance(value, uuid.UUID):
+            value = uuid.UUID(value)
+        return value
 
 
 class User(Base):
     """User account model."""
     __tablename__ = "users"
     
-    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     auth_hash = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, default="user")
@@ -35,8 +68,8 @@ class File(Base):
     """File metadata model (NO plaintext content!)."""
     __tablename__ = "files"
     
-    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     object_key = Column(String(255), unique=True, nullable=False, index=True)
     file_name = Column(String(255), nullable=False)
     iv = Column(String(255), nullable=False)  # Initialization vector (base64)
@@ -59,8 +92,8 @@ class RefreshToken(Base):
     """Refresh token model for JWT session management."""
     __tablename__ = "refresh_tokens"
     
-    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash = Column(String(255), nullable=False)
     expires_at = Column(DateTime, nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
@@ -76,10 +109,10 @@ class ActivityLog(Base):
     """Activity log model for audit trail."""
     __tablename__ = "activity_log"
     
-    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    id = Column(GUID, primary_key=True, default=uuid.uuid4)
+    user_id = Column(GUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     action = Column(String(50), nullable=False)
-    file_id = Column(Uuid(as_uuid=True), nullable=True)
+    file_id = Column(GUID, nullable=True)
     file_name = Column(String(255))
     details = Column(Text)
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC), index=True)

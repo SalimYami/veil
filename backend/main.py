@@ -675,6 +675,35 @@ async def upload_confirm(
 
 
 @app.get(
+    "/api/files/search",
+    tags=["Files"]
+)
+async def search_files(
+    q: str = "",
+    user: dict = Depends(get_current_user)
+):
+    """Search files by name."""
+    with get_db() as db:
+        files = FileRepository.search_files(db, user["id"], q, limit=10)
+        return {
+            "results": [
+                {
+                    "id": str(f.id),
+                    "name": f.file_name,
+                    "iv": f.iv,
+                    "auth_tag": f.auth_tag,
+                    "size": f.file_size,
+                    "mime_type": f.mime_type,
+                    "tags": f.tags or [],
+                    "created_at": f.created_at.isoformat()
+                }
+                for f in files
+            ],
+            "query": q
+        }
+
+
+@app.get(
     "/api/files/{file_id}",
     tags=["Files"]
 )
@@ -727,33 +756,7 @@ async def update_tags(
         raise HTTPException(status_code=404, detail=str(e))
 
 
-@app.get(
-    "/api/files/search",
-    tags=["Files"]
-)
-async def search_files(
-    q: str = "",
-    user: dict = Depends(get_current_user)
-):
-    """Search files by name."""
-    with get_db() as db:
-        files = FileRepository.search_files(db, user["id"], q, limit=10)
-        return {
-            "results": [
-                {
-                    "id": str(f.id),
-                    "name": f.file_name,
-                    "iv": f.iv,
-                    "auth_tag": f.auth_tag,
-                    "size": f.file_size,
-                    "mime_type": f.mime_type,
-                    "tags": f.tags or [],
-                    "created_at": f.created_at.isoformat()
-                }
-                for f in files
-            ],
-            "query": q
-        }
+
 
 
 @app.get(

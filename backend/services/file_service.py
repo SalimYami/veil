@@ -138,7 +138,7 @@ class FileService:
                 raise ValueError("File not found")
             
             # Verify ownership
-            if str(file_meta.user_id) != user_id:
+            if str(file_meta.user_id) != str(user_id):
                 raise ValueError("File does not belong to user")
             
             # Verify object exists in MinIO
@@ -188,7 +188,7 @@ class FileService:
                 raise ValueError("File not found")
             
             # Verify ownership
-            if str(file_meta.user_id) != user_id:
+            if str(file_meta.user_id) != str(user_id):
                 raise ValueError("File does not belong to user")
             
             # Verify file is uploaded (not pending)
@@ -252,7 +252,7 @@ class FileService:
                 raise ValueError("File not found")
             
             # Verify ownership
-            if str(file_meta.user_id) != user_id:
+            if str(file_meta.user_id) != str(user_id):
                 raise ValueError("File does not belong to user")
             
             # Delete from MinIO first (if it exists)
@@ -298,7 +298,7 @@ class FileService:
                 raise ValueError("File not found")
             
             # Verify ownership
-            if str(file_meta.user_id) != user_id:
+            if str(file_meta.user_id) != str(user_id):
                 raise ValueError("File does not belong to user")
             
             # Update tags
