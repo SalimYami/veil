@@ -53,7 +53,7 @@ def client():
         Base.metadata.create_all(bind=get_engine())
         
         from fastapi.testclient import TestClient
-        with TestClient(app) as c:
+        with TestClient(app, base_url="http://testserver") as c:
             yield c
             
         # Teardown tables
@@ -94,3 +94,24 @@ def authorized_client(client, auth_headers):
     # Restore headers to avoid affecting other tests if they share the same client
     if "Authorization" in client.headers:
         del client.headers["Authorization"]
+
+
+@pytest.fixture(scope="function")
+def db_session():
+    """
+    Database session for repository tests.
+    Uses the engine configured in the environment (SQLite for tests).
+    """
+    from sqlalchemy.orm import sessionmaker
+    from database.connection import get_engine, Base
+    
+    engine = get_engine()
+    # Ensure tables exist in the test database
+    Base.metadata.create_all(bind=engine)
+    
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    session = SessionLocal()
+    try:
+        yield session
+    finally:
+        session.close()
