@@ -42,7 +42,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from jose import JWTError, jwt
 
 # --- Database & Services ---
-from database.connection import init_db, get_db, health_check
+from database.connection import init_db, get_db, health_check, Base, get_engine
 from database.models import User, File
 from repositories.user_repository import UserRepository
 from repositories.file_repository import FileRepository
@@ -122,6 +122,11 @@ logger.info("Initializing database connection...")
 try:
     init_db(DATABASE_URL)
     logger.info("✅ Database initialized successfully")
+    
+    # Create tables if using SQLite (for smoke tests)
+    if DATABASE_URL.startswith("sqlite"):
+        Base.metadata.create_all(bind=get_engine())
+        logger.info("✅ SQLite tables created/verified")
 except Exception as e:
     logger.error(f"❌ Failed to initialize database: {str(e)}")
     logger.error(traceback.format_exc())
@@ -280,10 +285,6 @@ class ActivityEntry(BaseModel):
     file_id: Optional[str]
     timestamp: datetime
     details: str = ""
-    
-    @field_serializer('timestamp')
-    def serialize_dt(self, dt: datetime, _info):
-        return dt.isoformat()
 
 
 class UserStats(BaseModel):
@@ -294,10 +295,6 @@ class UserStats(BaseModel):
     oldest_file: Optional[datetime] = None
     newest_file: Optional[datetime] = None
     average_file_size_mb: float
-    
-    @field_serializer('oldest_file', 'newest_file')
-    def serialize_dt(self, dt: Optional[datetime], _info):
-        return dt.isoformat() if dt else None
 
 
 # =============================================================================
