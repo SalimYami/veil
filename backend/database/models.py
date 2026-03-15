@@ -4,7 +4,7 @@ These models map to the PostgreSQL schema.
 """
 
 from datetime import datetime, UTC
-from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Text, Uuid, JSON
+from sqlalchemy import Column, String, BigInteger, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 import uuid
 

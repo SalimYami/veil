@@ -1,4 +1,3 @@
-import pytest
 import uuid
 from repositories.user_repository import UserRepository
 from repositories.file_repository import FileRepository
