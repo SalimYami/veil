@@ -37,7 +37,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Depends, Header, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict, field_serializer
+from pydantic import BaseModel, EmailStr, Field, field_validator, ConfigDict
 from starlette.middleware.base import BaseHTTPMiddleware
 from jose import JWTError, jwt
 

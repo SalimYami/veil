@@ -4,12 +4,24 @@
 # Runs curl-based health checks against the live stack.
 # Usage: bash scripts/smoke-test.sh [BASE_URL]
 # ═══════════════════════════════════════════════════════════
-set -euo pipefail
+set -uxo pipefail
 
 BASE_URL="${1:-http://localhost:8000}"
 FRONTEND_URL="${2:-http://localhost:80}"
 PASS=0
 FAIL=0
+
+# Use local temp directory
+TMP_DIR="./.smoke_tmp"
+mkdir -p "$TMP_DIR"
+
+# Detect python command
+PYTHON_CMD="python"
+if ! command -v python &> /dev/null; then
+    if command -v python3 &> /dev/null; then
+        PYTHON_CMD="python3"
+    fi
+fi
 
 # Terminal colors
 GREEN='\033[0;32m'
@@ -40,35 +52,40 @@ echo -e "${YELLOW}🔒 VEIL Smoke Tests — $BASE_URL${NC}"
 echo "────────────────────────────────────────────"
 
 # ── 1. Health Check ──────────────────────────────────────────
-RESP=$(curl -s -o /tmp/veil_resp.json -w "%{http_code}" "$BASE_URL/health")
-BODY=$(cat /tmp/veil_resp.json 2>/dev/null || echo "")
+echo "Checking API health..."
+RESP=$(curl -s -o "$TMP_DIR/resp.json" -w "%{http_code}" "$BASE_URL/health" || echo "000")
+BODY=$(cat "$TMP_DIR/resp.json" 2>/dev/null || echo "")
 check "GET /health returns 200" "200" "$RESP" "$BODY"
 
 # Validate JSON content
 if echo "$BODY" | grep -q '"status"'; then
-    STATUS=$(echo "$BODY" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','?'))" 2>/dev/null || echo "?")
+    STATUS=$($PYTHON_CMD -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','?'))" <<< "$BODY" 2>/dev/null || echo "?")
     echo -e "   ${YELLOW}→ API Status: $STATUS${NC}"
 fi
 
 # ── 2. OpenAPI Docs ──────────────────────────────────────────
-RESP=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/docs")
+echo "Checking documentation..."
+RESP=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/docs" || echo "000")
 check "GET /docs (Swagger UI) returns 200" "200" "$RESP" ""
 
 # ── 3. OpenAPI Schema ────────────────────────────────────────
-RESP=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/openapi.json")
+echo "Checking OpenAPI schema..."
+RESP=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/openapi.json" || echo "000")
 check "GET /openapi.json returns 200" "200" "$RESP" ""
 
 # ── 4. Auth Returns 401 Without Token ────────────────────────
-RESP=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/files")
+echo "Checking unauthorized access..."
+RESP=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api/files" || echo "000")
 check "GET /api/files without token → 401" "401" "$RESP" ""
 
 # ── 5. Register a Test User ──────────────────────────────────
+echo "Registering test user..."
 REGISTER_BODY='{"email":"smoke@salimyami.dev","auth_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"}'
-RESP=$(curl -s -o /tmp/veil_reg.json -w "%{http_code}" \
+RESP=$(curl -s -o "$TMP_DIR/reg.json" -w "%{http_code}" \
     -X POST "$BASE_URL/api/auth/register" \
     -H "Content-Type: application/json" \
-    -d "$REGISTER_BODY")
-REG_BODY=$(cat /tmp/veil_reg.json 2>/dev/null || echo "")
+    -d "$REGISTER_BODY" || echo "000")
+REG_BODY=$(cat "$TMP_DIR/reg.json" 2>/dev/null || echo "")
 
 # 201 = new user, 400 = already exists (both acceptable)
 if [[ "$RESP" == "201" || "$RESP" == "400" ]]; then
@@ -76,38 +93,43 @@ if [[ "$RESP" == "201" || "$RESP" == "400" ]]; then
     ((PASS++))
 else
     echo -e "${RED}❌ FAIL${NC} [$RESP] POST /api/auth/register"
+    echo "   Response: $REG_BODY"
     ((FAIL++))
 fi
 
 # ── 6. Login and Get Token ────────────────────────────────────
+echo "Logging in..."
 LOGIN_BODY='{"email":"smoke@salimyami.dev","auth_hash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"}'
-RESP=$(curl -s -o /tmp/veil_login.json -w "%{http_code}" \
+RESP=$(curl -s -o "$TMP_DIR/login.json" -w "%{http_code}" \
     -X POST "$BASE_URL/api/auth/login" \
     -H "Content-Type: application/json" \
-    -d "$LOGIN_BODY")
-LOGIN_JSON=$(cat /tmp/veil_login.json 2>/dev/null || echo "")
+    -d "$LOGIN_BODY" || echo "000")
+LOGIN_JSON=$(cat "$TMP_DIR/login.json" 2>/dev/null || echo "")
 check "POST /api/auth/login returns 200" "200" "$RESP" "$LOGIN_JSON"
 
 # Extract token
-TOKEN=$(echo "$LOGIN_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))" 2>/dev/null || echo "")
+TOKEN=$($PYTHON_CMD -c "import sys,json; d=json.load(sys.stdin); print(d.get('access_token',''))" <<< "$LOGIN_JSON" 2>/dev/null || echo "")
 
 if [[ -n "$TOKEN" ]]; then
     echo -e "   ${YELLOW}→ Token obtained${NC} (${TOKEN:0:30}...)"
 
     # ── 7. Authenticated /api/files ────────────────────────────
+    echo "Checking authenticated files access..."
     RESP=$(curl -s -o /dev/null -w "%{http_code}" \
         -H "Authorization: Bearer $TOKEN" \
-        "$BASE_URL/api/files")
+        "$BASE_URL/api/files" || echo "000")
     check "GET /api/files with token → 200" "200" "$RESP" ""
 
     # ── 8. /api/stats ─────────────────────────────────────────
+    echo "Checking authenticated stats access..."
     RESP=$(curl -s -o /dev/null -w "%{http_code}" \
         -H "Authorization: Bearer $TOKEN" \
-        "$BASE_URL/api/stats")
+        "$BASE_URL/api/stats" || echo "000")
     check "GET /api/stats with token → 200" "200" "$RESP" ""
 fi
 
 # ── 9. Frontend Reachable ────────────────────────────────────
+echo "Checking frontend..."
 RESP=$(curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL" 2>/dev/null || echo "000")
 if [[ "$RESP" == "200" || "$RESP" == "304" ]]; then
     echo -e "${GREEN}✅ PASS${NC} [$RESP] GET $FRONTEND_URL (frontend)"
@@ -121,6 +143,9 @@ echo ""
 echo "────────────────────────────────────────────"
 echo -e "Results: ${GREEN}$PASS passed${NC} | ${RED}$FAIL failed${NC}"
 echo ""
+
+# Cleanup
+rm -rf "$TMP_DIR"
 
 if [[ $FAIL -gt 0 ]]; then
     echo -e "${RED}❌ Smoke tests FAILED${NC}"
