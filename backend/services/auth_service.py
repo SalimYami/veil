@@ -5,6 +5,7 @@ Handles registration, login, token refresh, and role management.
 
 import logging
 import uuid
+import os
 from datetime import datetime, timedelta, UTC
 
 from passlib.context import CryptContext
@@ -69,8 +70,11 @@ class AuthService:
             # Hash the auth_hash with bcrypt (double hashing)
             hashed_auth_hash = pwd_context.hash(auth_hash)
             
-            # Create user
-            user = UserRepository.create_user(db, email, hashed_auth_hash, role="user")
+            # Générer un sel cryptographique unique (32 bytes → 64 hex chars)
+            salt = os.urandom(32).hex()
+            
+            # Create user with unique salt
+            user = UserRepository.create_user(db, email, hashed_auth_hash, salt=salt, role="user")
             
             # Generate tokens
             access_token = self._create_access_token(user.id)

@@ -1,17 +1,21 @@
 /**
  * =============================================================================
- * VEIL - Module Cryptographique Côté Client
+ * VEIL - Module Cryptographique Côté Client (State of the Art)
  * =============================================================================
  * 
- * 🔐 C'EST ICI QUE LA MAGIE ZERO-KNOWLEDGE OPÈRE !
+ * 🔐 ZERO-KNOWLEDGE + CLÉ NON-EXTRACTABLE
  * 
  * Ce module gère:
- * 1. Dérivation de clés avec Argon2id (mot de passe → clés)
- * 2. Chiffrement AES-256-GCM (fichiers → blobs chiffrés)
- * 3. Déchiffrement (blobs → fichiers originaux)
+ * 1. Dérivation de clés avec Argon2id (mot de passe + sel serveur → clés)
+ * 2. Import de la clé de chiffrement comme CryptoKey non-extractable
+ * 3. Chiffrement AES-256-GCM (fichiers → blobs chiffrés)
+ * 4. Déchiffrement (blobs → fichiers originaux)
  * 
- * ⚠️ IMPORTANT: L'encryptionKey ne quitte JAMAIS ce fichier !
- * Elle reste en mémoire et n'est jamais envoyée au serveur.
+ * ⚠️ SÉCURITÉ:
+ * - L'encryptionKey est un objet CryptoKey avec extractable=false
+ * - Le navigateur refuse physiquement d'exporter les bytes de la clé
+ * - Même un script XSS ne peut pas lire la clé
+ * - Les bytes bruts sont zéroïsés en mémoire après import
  * 
  * =============================================================================
  */
@@ -27,11 +31,11 @@ import { argon2id } from 'hash-wasm';
  * Résultat de la dérivation de clés.
  * 
  * @property authKey - Clé d'authentification (envoyée au serveur, hashée)
- * @property encryptionKey - Clé de chiffrement (JAMAIS envoyée au serveur!)
+ * @property encryptionKey - CryptoKey non-extractable (JAMAIS accessible en JS!)
  */
 export interface DerivedKeys {
   authKey: Uint8Array;
-  encryptionKey: Uint8Array;
+  encryptionKey: CryptoKey;  // ← Non-extractable : le JS ne peut plus lire les bytes
 }
 
 /**
@@ -46,48 +50,33 @@ export interface EncryptedData {
 }
 
 // =============================================================================
-// DÉRIVATION DE CLÉS (Argon2id)
+// DÉRIVATION DE CLÉS (Argon2id + CryptoKey non-extractable)
 // =============================================================================
 
 /**
- * Dérive deux clés à partir du mot de passe et de l'email.
+ * Dérive deux clés à partir du mot de passe et d'un sel serveur.
  * 
- * 🔑 POURQUOI ARGON2ID ?
- * ---------------------
- * - Gagnant du Password Hashing Competition (2015)
- * - Résistant aux attaques GPU/ASIC (utilise beaucoup de mémoire)
- * - Combine Argon2i (résistant aux side-channel) et Argon2d (résistant au GPU)
+ * 🔑 CHANGEMENTS "STATE OF THE ART" :
+ * ------------------------------------
+ * 1. Le sel provient du serveur (pas de SHA-256(email) déterministe)
+ * 2. La clé de chiffrement est importée comme CryptoKey avec extractable=false
+ * 3. Les bytes bruts de la clé sont zéroïsés après import
  * 
- * 📊 PARAMÈTRES CHOISIS:
+ * 📊 PARAMÈTRES ARGON2ID:
  * ----------------------
  * - memory: 65536 KB (64 MB) - Rend les attaques par force brute très coûteuses
  * - iterations: 3 - Nombre de passes (recommandé par OWASP)
  * - parallelism: 4 - Utilise 4 threads
  * - hashLen: 64 bytes - Produit 512 bits, qu'on divise en 2 clés de 256 bits
  * 
- * 🔄 PROCESSUS:
- * -------------
- * 1. Salt = SHA-256(email) → Salt déterministe basé sur l'email
- * 2. derivedKey = Argon2id(password, salt, params) → 512 bits
- * 3. authKey = derivedKey[0:32] → 256 bits pour l'authentification
- * 4. encryptionKey = derivedKey[32:64] → 256 bits pour le chiffrement
- * 
  * @param password - Mot de passe en clair (jamais stocké!)
- * @param email - Email de l'utilisateur (utilisé comme base pour le salt)
- * @returns Les deux clés dérivées
+ * @param salt - Sel cryptographique unique fourni par le serveur
+ * @returns Les deux clés dérivées (authKey brute + encryptionKey non-extractable)
  */
-export async function deriveKeys(password: string, email: string): Promise<DerivedKeys> {
+export async function deriveKeys(password: string, salt: Uint8Array): Promise<DerivedKeys> {
   console.log('🔑 Dérivation des clés avec Argon2id (hash-wasm)...');
 
-  // Étape 1: Créer un salt déterministe à partir de l'email
-  // Pourquoi déterministe ? Pour pouvoir re-dériver les mêmes clés à la connexion !
-  const encoder = new TextEncoder();
-  const emailBytes = encoder.encode(email.toLowerCase());
-  const saltHash = await crypto.subtle.digest('SHA-256', emailBytes);
-  const salt = new Uint8Array(saltHash).slice(0, 16); // Argon2 veut 16 bytes
-
-  // Étape 2: Dériver les clés avec Argon2id via hash-wasm
-  // Cette bibliothèque WASM est bien packagée et compatible avec Vite !
+  // Étape 1: Dériver les clés avec Argon2id via hash-wasm
   const hashHex = await argon2id({
     password: password,
     salt: salt,
@@ -101,13 +90,32 @@ export async function deriveKeys(password: string, email: string): Promise<Deriv
   // Convertir le hex en Uint8Array
   const derivedBytes = new Uint8Array(hashHex.match(/.{2}/g)!.map(byte => parseInt(byte, 16)));
 
-  // Étape 3: Diviser en deux clés de 256 bits chacune
+  // Étape 2: Diviser en deux clés de 256 bits chacune
   const authKey = derivedBytes.slice(0, 32);        // Premiers 256 bits
-  const encryptionKey = derivedBytes.slice(32, 64); // Derniers 256 bits
+  const encKeyRaw = derivedBytes.slice(32, 64);     // Derniers 256 bits
+
+  // ══════════════════════════════════════════════════════
+  // IMPORT NON-EXTRACTABLE (Protection XSS)
+  // ══════════════════════════════════════════════════════
+  // Le navigateur stocke la clé dans son module crypto C++.
+  // JavaScript ne peut PLUS lire les octets de cette clé.
+  // crypto.subtle.exportKey() lèvera une DOMException.
+  const encryptionKey = await crypto.subtle.importKey(
+    'raw',
+    encKeyRaw.buffer as ArrayBuffer,
+    { name: 'AES-GCM' },
+    false,            // ← extractable: false = la clé est VERROUILLÉE
+    ['encrypt', 'decrypt']
+  );
+
+  // Étape 3: Zéroïser les bytes bruts de la clé en mémoire
+  // Même si un attaquant dumpe la RAM, les bytes sont détruits
+  encKeyRaw.fill(0);
+  derivedBytes.fill(0);
 
   console.log('✅ Clés dérivées avec succès');
   console.log('   - authKey: prête à être hashée et envoyée au serveur');
-  console.log('   - encryptionKey: stockée en RAM uniquement');
+  console.log('   - encryptionKey: CryptoKey non-extractable (sécurisée)');
 
   return { authKey, encryptionKey };
 }
@@ -150,49 +158,30 @@ export async function hashAuthKey(authKey: Uint8Array): Promise<string> {
  *   - Le tag d'authentification détecte toute modification
  *   - Parallélisable: rapide sur multi-core
  * 
- * 📊 STRUCTURE DU RÉSULTAT:
- * -------------------------
- * - ciphertext: données chiffrées + tag d'authentification (16 bytes à la fin)
- * - iv: vecteur d'initialisation (12 bytes, unique par fichier)
- * 
- * ⚠️ RÈGLE CRITIQUE:
- * ------------------
- * Ne JAMAIS réutiliser le même IV avec la même clé !
- * C'est pourquoi on génère un IV aléatoire pour chaque fichier.
+ * 📊 CHANGEMENT: Accepte directement un CryptoKey (plus besoin d'importer)
  * 
  * @param file - ArrayBuffer du fichier à chiffrer
- * @param encryptionKey - Clé de chiffrement (256 bits)
+ * @param encryptionKey - CryptoKey non-extractable (256 bits)
  * @returns Les données chiffrées et l'IV
  */
 export async function encryptFile(
   file: ArrayBuffer,
-  encryptionKey: Uint8Array
+  encryptionKey: CryptoKey
 ): Promise<EncryptedData> {
   console.log('🔒 Chiffrement du fichier avec AES-256-GCM...');
 
   // Étape 1: Générer un IV aléatoire (12 bytes = 96 bits recommandé pour GCM)
   const iv = new Uint8Array(12);
   crypto.getRandomValues(iv);
-  const ivBuffer = iv.buffer as ArrayBuffer;
 
-  // Étape 2: Importer la clé pour WebCrypto
-  const keyBuffer = new Uint8Array(encryptionKey).buffer as ArrayBuffer;
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyBuffer,
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt']
-  );
-
-  // Étape 3: Chiffrer avec AES-GCM
+  // Étape 2: Chiffrer avec AES-GCM (la clé est déjà un CryptoKey)
   const ciphertext = await crypto.subtle.encrypt(
     {
       name: 'AES-GCM',
-      iv: ivBuffer,
+      iv: iv.buffer as ArrayBuffer,
       tagLength: 128
     },
-    cryptoKey,
+    encryptionKey,
     file
   );
 
@@ -214,7 +203,7 @@ export async function encryptFile(
  * 
  * 🔄 PROCESSUS:
  * -------------
- * 1. Importer la clé de chiffrement
+ * 1. Utiliser le CryptoKey non-extractable directement
  * 2. Utiliser l'IV fourni (celui utilisé lors du chiffrement)
  * 3. Déchiffrer et vérifier le tag d'authentification
  * 
@@ -227,27 +216,16 @@ export async function encryptFile(
  * 
  * @param ciphertext - Données chiffrées (inclut le tag à la fin)
  * @param iv - Vecteur d'initialisation utilisé lors du chiffrement
- * @param encryptionKey - Clé de déchiffrement (doit être la même que pour le chiffrement)
+ * @param encryptionKey - CryptoKey non-extractable
  * @returns Le fichier original déchiffré
  */
 export async function decryptFile(
   ciphertext: ArrayBuffer,
   iv: Uint8Array,
-  encryptionKey: Uint8Array
+  encryptionKey: CryptoKey
 ): Promise<ArrayBuffer> {
   console.log('🔓 Déchiffrement du fichier...');
 
-  // Étape 1: Importer la clé
-  const keyBuffer = new Uint8Array(encryptionKey).buffer as ArrayBuffer;
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyBuffer,
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt']
-  );
-
-  // Étape 2: Déchiffrer
   const ivBuffer = new Uint8Array(iv).buffer as ArrayBuffer;
   try {
     const decrypted = await crypto.subtle.decrypt(
@@ -256,7 +234,7 @@ export async function decryptFile(
         iv: ivBuffer,
         tagLength: 128
       },
-      cryptoKey,
+      encryptionKey,
       ciphertext
     );
 

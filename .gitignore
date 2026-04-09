@@ -58,3 +58,12 @@ storage/
 # Databases
 backend/*.db
 backend/*.sqlite
+*.db
+
+# Debug / Smoke test artifacts
+debug_*.py
+debug_*.log
+smoke_*.txt
+backend_smoke.log
+scripts/smoke_debug.py
+scripts/test_stats_debug.py

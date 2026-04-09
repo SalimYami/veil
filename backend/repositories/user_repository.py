@@ -19,7 +19,7 @@ class UserRepository:
     """Repository for user database operations."""
     
     @staticmethod
-    def create_user(db: Session, email: str, auth_hash: str, role: str = "user") -> User:
+    def create_user(db: Session, email: str, auth_hash: str, salt: str = None, role: str = "user") -> User:
         """
         Create a new user.
         
@@ -27,6 +27,7 @@ class UserRepository:
             db: Database session
             email: User email (must be unique)
             auth_hash: bcrypt hash of client-derived authKey
+            salt: Hex-encoded 32-byte cryptographic salt (anti-énumération)
             role: User role ('user' or 'admin')
         
         Returns:
@@ -38,6 +39,7 @@ class UserRepository:
         user = User(
             email=email,
             auth_hash=auth_hash,
+            salt=salt,
             role=role
         )
         

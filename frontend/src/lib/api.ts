@@ -63,6 +63,17 @@ export async function register(email: string, authHash: string): Promise<AuthRes
 }
 
 /**
+ * Récupération du sel cryptographique (pre-flight, anti-énumération).
+ * Retourne TOUJOURS un sel, que l'utilisateur existe ou non.
+ */
+export async function getSalt(email: string): Promise<{ salt: string }> {
+    const response = await api.get<{ salt: string }>('/api/auth/salt', {
+        params: { email }
+    });
+    return response.data;
+}
+
+/**
  * Connexion d'un utilisateur existant.
  */
 export async function login(email: string, authHash: string): Promise<AuthResponse> {

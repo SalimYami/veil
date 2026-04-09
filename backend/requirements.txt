@@ -20,6 +20,13 @@ alembic==1.13.1
 # --- Object Storage (MinIO) ---
 minio==7.2.3
 
+# --- Rate Limiting (Redis) ---
+redis[hiredis]>=5.0.0
+
+# --- MFA / TOTP ---
+pyotp>=2.9.0
+qrcode[pil]>=7.4
+
 # --- Utilitaires ---
 pydantic[email]==2.5.3
 pydantic-settings==2.1.0

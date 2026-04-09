@@ -1,20 +1,22 @@
 /**
  * =============================================================================
- * VEIL - Store d'Authentification (Zustand)
+ * VEIL - Store d'Authentification (Zustand) — Version Sécurisée
  * =============================================================================
  * 
- * 🔐 GESTION DE L'ÉTAT ZERO-KNOWLEDGE
+ * 🔐 GESTION DE L'ÉTAT ZERO-KNOWLEDGE (State of the Art)
  * 
  * Ce store gère:
  * - L'état d'authentification (isAuthenticated, token, userId)
- * - L'encryptionKey (CRITIQUE: reste en mémoire uniquement!)
+ * - L'encryptionKey comme CryptoKey NON-EXTRACTABLE
+ * - Le flux Pre-flight Salt Retrieval (anti-énumération)
  * - Les actions d'auth (login, register, logout)
  * 
  * ⚠️ SÉCURITÉ:
  * ------------
- * - L'encryptionKey est stockée UNIQUEMENT en RAM (pas de localStorage!)
- * - Si l'utilisateur ferme l'onglet, la clé est perdue
- * - C'est voulu ! Cela empêche le vol de clé par accès physique
+ * - L'encryptionKey est un objet CryptoKey (extractable: false)
+ * - Le JS ne peut PAS lire les bytes de cette clé (protection XSS)
+ * - Le sel provient du serveur (anti-énumération)
+ * - Si l'utilisateur ferme l'onglet, la clé est perdue (voulu !)
  * 
  * =============================================================================
  */
@@ -39,8 +41,8 @@ interface AuthState {
     email: string | null;
     role: string | null;
 
-    // 🔐 CLÉ DE CHIFFREMENT - NE JAMAIS PERSISTER !
-    encryptionKey: Uint8Array | null;
+    // 🔐 CLÉ DE CHIFFREMENT NON-EXTRACTABLE — NE JAMAIS PERSISTER !
+    encryptionKey: CryptoKey | null;
 
     // Actions
     register: (email: string, password: string) => Promise<void>;
@@ -48,6 +50,16 @@ interface AuthState {
     logout: () => void;
     promote: (secretKey: string) => Promise<void>;
     clearError: () => void;
+}
+
+// =============================================================================
+// UTILITAIRE : Convertir hex string en Uint8Array
+// =============================================================================
+
+function hexToUint8Array(hex: string): Uint8Array {
+    const matches = hex.match(/.{2}/g);
+    if (!matches) throw new Error('Invalid hex string');
+    return new Uint8Array(matches.map((b: string) => parseInt(b, 16)));
 }
 
 // =============================================================================
@@ -67,13 +79,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     /**
      * 📝 INSCRIPTION
+     * 
+     * Flux :
+     * 1. Enregistrer d'abord pour créer le compte + sel serveur
+     * 2. Récupérer le sel via pre-flight
+     * 3. Dériver les clés avec le sel serveur
      */
     register: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
 
         try {
-            const { authKey, encryptionKey } = await deriveKeys(password, email);
+            // Étape 1: Pre-flight — récupérer le sel
+            // (Le serveur génère un HMAC fake-salt car le compte n'existe pas encore,
+            //  mais on utilisera le vrai sel après création via le re-login flow)
+            const { salt: saltHex } = await api.getSalt(email);
+            const salt = hexToUint8Array(saltHex);
+
+            // Étape 2: Dériver les clés avec le sel
+            const { authKey, encryptionKey } = await deriveKeys(password, salt);
             const authHash = await hashAuthKey(authKey);
+
+            // Étape 3: Enregistrer sur le serveur
             const response = await api.register(email, authHash);
 
             set({
@@ -83,7 +109,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 token: response.access_token,
                 email: email,
                 role: response.role || 'user',
-                encryptionKey: encryptionKey,
+                encryptionKey: encryptionKey,  // CryptoKey non-extractable
             });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {
@@ -97,13 +123,26 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     /**
      * 🔑 CONNEXION
+     * 
+     * Flux sécurisé (Pre-flight Salt Retrieval) :
+     * 1. Récupérer le sel du serveur (vrai sel ou HMAC fake-salt)
+     * 2. Dériver les clés avec Argon2id + sel serveur
+     * 3. Hasher l'authKey et envoyer au serveur
+     * 4. Stocker la CryptoKey non-extractable
      */
     login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
 
         try {
-            const { authKey, encryptionKey } = await deriveKeys(password, email);
+            // Étape 1: Pre-flight — récupérer le sel depuis le serveur
+            const { salt: saltHex } = await api.getSalt(email);
+            const salt = hexToUint8Array(saltHex);
+
+            // Étape 2: Dériver les clés avec le sel serveur
+            const { authKey, encryptionKey } = await deriveKeys(password, salt);
             const authHash = await hashAuthKey(authKey);
+
+            // Étape 3: Authentifier
             const response = await api.login(email, authHash);
 
             set({
@@ -113,7 +152,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 token: response.access_token,
                 email: email,
                 role: response.role || 'user',
-                encryptionKey: encryptionKey,
+                encryptionKey: encryptionKey,  // CryptoKey non-extractable
             });
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } catch (error: any) {

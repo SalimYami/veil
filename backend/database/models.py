@@ -51,6 +51,7 @@ class User(Base):
     id = Column(GUID, primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
     auth_hash = Column(String(255), nullable=False)
+    salt = Column(String(64), nullable=True)  # Hex-encoded 32 bytes (os.urandom(32)) — anti-énumération
     role = Column(String(50), nullable=False, default="user")
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))

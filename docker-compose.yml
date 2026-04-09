@@ -75,6 +75,20 @@ services:
       exit 0;
       "
 
+  # ── Redis (Rate Limiting distribué) ────────────────
+  veil-redis:
+    image: redis:7-alpine
+    container_name: veil-redis
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
   # ── Backend API (FastAPI) ───────────────────────
   backend:
     build: ./backend
@@ -92,12 +106,16 @@ services:
       - VEIL_SECRET_KEY=${VEIL_SECRET_KEY}
       - VEIL_REFRESH_SECRET_KEY=${VEIL_REFRESH_SECRET_KEY}
       - VEIL_ADMIN_KEY=${VEIL_ADMIN_KEY}
+      - REDIS_URL=redis://veil-redis:6379/0
+      - SALT_HMAC_SECRET=${SALT_HMAC_SECRET}
     ports:
       - "8000:8000"
     depends_on:
       veil-db:
         condition: service_healthy
       veil-storage:
+        condition: service_healthy
+      veil-redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

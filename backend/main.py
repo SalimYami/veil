@@ -26,6 +26,8 @@ Le serveur ne voit JAMAIS les données en clair !
 
 import os
 import uuid
+import hmac
+import hashlib
 import logging
 import time
 import traceback
@@ -51,6 +53,12 @@ from storage.minio_client import MinIOClient
 from services.auth_service import AuthService
 from services.file_service import FileService
 from sqlalchemy import func
+
+# --- Configuration Fail-Fast ---
+from config import settings
+
+# --- Rate Limiting ---
+from middleware.rate_limiter import RateLimitMiddleware
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -84,33 +92,29 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
 
 # =============================================================================
-# CONFIGURATION
+# CONFIGURATION (Fail-Fast via Pydantic — voir config.py)
 # =============================================================================
+# Toutes les valeurs viennent de `settings` (config.py).
+# L'app crash au démarrage si un secret est absent du .env.
 
-# JWT Configuration
-SECRET_KEY = os.getenv("VEIL_SECRET_KEY", "veil-super-secret-key-change-this-in-production")
-REFRESH_SECRET_KEY = os.getenv("VEIL_REFRESH_SECRET_KEY", "veil-refresh-secret-key-change-this-in-production")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 15
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+SECRET_KEY = settings.VEIL_SECRET_KEY
+REFRESH_SECRET_KEY = settings.VEIL_REFRESH_SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
-# Admin Configuration
-ADMIN_KEY = os.getenv("VEIL_ADMIN_KEY", "veil-admin-1234")
+ADMIN_KEY = settings.VEIL_ADMIN_KEY
+DATABASE_URL = settings.DATABASE_URL
 
-# Database Configuration
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://veil:veil@localhost:5432/veil")
+MINIO_ENDPOINT = settings.MINIO_ENDPOINT
+MINIO_ACCESS_KEY = settings.MINIO_ACCESS_KEY
+MINIO_SECRET_KEY = settings.MINIO_SECRET_KEY
+MINIO_BUCKET = settings.MINIO_BUCKET
+MINIO_EXTERNAL_ENDPOINT = settings.MINIO_EXTERNAL_ENDPOINT
+MINIO_SECURE = settings.MINIO_SECURE
 
-# MinIO Configuration
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "veil-storage:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-MINIO_BUCKET = os.getenv("MINIO_BUCKET", "veil-storage")
-MINIO_EXTERNAL_ENDPOINT = os.getenv("MINIO_EXTERNAL_ENDPOINT", "http://127.0.0.1:9999")
-MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
-
-# Limits
-MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", str(100 * 1024 * 1024)))  # 100 MB
-MAX_FILES_PER_USER = int(os.getenv("MAX_FILES_PER_USER", "1000"))
+MAX_FILE_SIZE = settings.MAX_FILE_SIZE
+MAX_FILES_PER_USER = settings.MAX_FILES_PER_USER
 
 
 # =============================================================================
@@ -136,8 +140,7 @@ except Exception as e:
 # Initialize MinIO
 logger.info("Initializing MinIO clients...")
 try:
-    # Get region from env or default to us-east-1
-    minio_region = os.getenv("MINIO_REGION", "us-east-1")
+    minio_region = settings.MINIO_REGION
     
     # Internal client (for backend-to-storage ops)
     minio_client = MinIOClient(
@@ -445,30 +448,34 @@ app = FastAPI(
 async def global_exception_handler(request: Request, exc: Exception):
     """
     Gère toutes les exceptions non catchées avec headers CORS.
-    CRITIQUE : Sans ceci, les erreurs 500 n'ont pas de headers CORS.
+    PRODUCTION: Renvoie uniquement un trace_id au client.
+    Le traceback complet est loggué côté serveur avec le même trace_id.
     """
-    logger.error(f"❌ Unhandled exception on {request.method} {request.url.path}")
-    logger.error(f"   Error: {str(exc)}")
-    logger.error(f"   Traceback:\n{traceback.format_exc()}")
-
-    # Déterminer le status code
-    status_code = 500
-    detail = "Internal server error"
+    import uuid as _uuid
+    trace_id = str(_uuid.uuid4())[:8]  # Court et mémorisable
 
     if isinstance(exc, HTTPException):
+        # HTTPException = erreurs "voulues" → renvoyer normalement
         status_code = exc.status_code
         detail = exc.detail
+    else:
+        # Erreur inattendue → masquer le détail, logger le traceback
+        status_code = 500
+        detail = f"Internal server error [ref: {trace_id}]"
+        logger.critical(
+            f"❌ UNHANDLED [{trace_id}] {request.method} {request.url.path}\n"
+            f"   Error: {type(exc).__name__}: {str(exc)}\n"
+            f"   Traceback:\n{traceback.format_exc()}"
+        )
 
     # Récupérer l'origine autorisée si possible
     origin = request.headers.get("origin")
-    allowed_origin = "*"
-    if origin in allowed_origins:
-        allowed_origin = origin
+    allowed_origin = origin if origin in allowed_origins else "*"
 
     # Retourner avec headers CORS explicites
     return JSONResponse(
         status_code=status_code,
-        content={"detail": detail},
+        content={"detail": detail, "trace_id": trace_id},
         headers={
             "Access-Control-Allow-Origin": allowed_origin,
             "Access-Control-Allow-Credentials": "true",
@@ -477,14 +484,12 @@ async def global_exception_handler(request: Request, exc: Exception):
         }
     )
 
-# Add middleware
+# Add middleware (ordre important : CORS en dernier = exécuté en premier)
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(RateLimitMiddleware)
 
 # CORS configuration
-allowed_origins = os.getenv(
-    "VEIL_ALLOWED_ORIGINS",
-    "http://localhost:5173,http://127.0.0.1:5173"
-).split(",")
+allowed_origins = settings.VEIL_ALLOWED_ORIGINS.split(",")
 
 app.add_middleware(
     CORSMiddleware,
@@ -492,7 +497,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization"],
-    expose_headers=["X-Process-Time"]
+    expose_headers=["X-Process-Time", "Retry-After"]
 )
 
 
@@ -550,6 +555,39 @@ async def login(user: UserLogin):
         return Token(**token_data)
     except ValueError as e:
         raise HTTPException(status_code=401, detail=str(e))
+
+
+@app.get(
+    "/api/auth/salt",
+    tags=["Authentication"]
+)
+async def get_salt(email: str):
+    """
+    Pre-flight salt retrieval (anti-énumération).
+    
+    Retourne TOUJOURS un sel, même si l'utilisateur n'existe pas.
+    Pour un utilisateur réel : sel unique stocké en DB.
+    Pour un utilisateur inexistant : faux sel déterministe via HMAC.
+    
+    Un attaquant ne peut pas distinguer un vrai sel d'un faux.
+    """
+    with get_db() as db:
+        user = UserRepository.get_user_by_email(db, email)
+
+        if user and hasattr(user, 'salt') and user.salt:
+            # Utilisateur réel → sel cryptographique stocké en DB
+            salt_hex = user.salt
+        else:
+            # Utilisateur inexistant (ou legacy sans sel)
+            # → Faux sel déterministe via HMAC-SHA256(server_secret, email)
+            # Le même email produit toujours le même faux sel
+            salt_hex = hmac.new(
+                settings.SALT_HMAC_SECRET.encode(),
+                email.lower().encode(),
+                hashlib.sha256
+            ).hexdigest()[:32]  # 16 bytes en hex
+
+    return {"salt": salt_hex}
 
 
 @app.post(
