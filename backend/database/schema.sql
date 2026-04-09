@@ -15,6 +15,7 @@ CREATE TABLE users (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     email VARCHAR(255) NOT NULL UNIQUE,
     auth_hash VARCHAR(255) NOT NULL,  -- bcrypt hash of client-derived authKey
+    salt VARCHAR(64),                 -- Hex-encoded 32-bytes salt (anti-énumération)
     role VARCHAR(50) NOT NULL DEFAULT 'user',  -- 'user' or 'admin'
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
