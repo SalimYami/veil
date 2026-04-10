@@ -9,208 +9,329 @@ import { ActivityFeed } from './ActivityFeed';
 import { TagFilter } from './TagFilter';
 import { Logo } from './Logo';
 import {
-    LogOut, KeyRound, Lock, Settings,
-    PanelLeftClose, PanelLeftOpen, CheckCircle, AlertCircle, Info, X, Zap
+  LogOut, KeyRound, Lock, Settings,
+  PanelLeftClose, PanelLeftOpen, CheckCircle2,
+  AlertCircle, Info, X, Upload, ShieldCheck
 } from 'lucide-react';
 
 export function Dashboard() {
-    const { email, role, logout, promote, isLoading, error, clearError } = useAuthStore();
-    const { toasts, removeToast } = useFileStore();
-    const [view, setView] = useState<'user' | 'admin'>('user');
-    const [showPromoteModal, setShowPromoteModal] = useState(false);
-    const [adminKey, setAdminKey] = useState('');
-    const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { email, role, logout, promote, isLoading, error, clearError } = useAuthStore();
+  const { toasts, removeToast, files, uploadQueue } = useFileStore();
+  const [view, setView] = useState<'user' | 'admin'>('user');
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [adminKey, setAdminKey] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeSection, setActiveSection] = useState<'vault' | 'upload'>('vault');
 
-    const handlePromote = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            await promote(adminKey);
-            setShowPromoteModal(false);
-            setAdminKey('');
-        } catch {
-            // Error handled by store
-        }
-    };
-
-    if (view === 'admin') {
-        return <AdminDashboard onBack={() => setView('user')} />;
+  const handlePromote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await promote(adminKey);
+      setShowPromoteModal(false);
+      setAdminKey('');
+    } catch {
+      // Error handled by store
     }
+  };
 
-    const toastIcon = (type: string) => {
-        if (type === 'success') return <CheckCircle size={18} className="text-vault-success" />;
-        if (type === 'error') return <AlertCircle size={18} className="text-red-500" />;
-        return <Info size={18} className="text-vault-text-primary" />;
-    };
+  if (view === 'admin') {
+    return <AdminDashboard onBack={() => setView('user')} />;
+  }
 
-    return (
-        <div className="min-h-screen bg-vault-bg-primary text-vault-text-primary flex flex-col font-sans selection:bg-white/20 selection:text-white relative">
-            {/* Background Mesh */}
-            <div className="absolute inset-0 bg-mesh opacity-40 pointer-events-none z-0"></div>
+  const toastConfig = (type: string) => {
+    if (type === 'success') return { icon: <CheckCircle2 size={15} />, cls: 'text-v-success', bar: 'bg-v-success' };
+    if (type === 'error') return { icon: <AlertCircle size={15} />, cls: 'text-v-danger', bar: 'bg-v-danger' };
+    return { icon: <Info size={15} />, cls: 'text-v-accent-2', bar: 'bg-v-accent' };
+  };
 
-            {/* Header */}
-            <header className="sticky top-0 z-50 h-20 px-8 flex items-center justify-between gap-6 bg-[#000000]/80 backdrop-blur-2xl border-b border-white/5 shadow-sm">
-                <div className="flex items-center gap-4">
-                    <button
-                        className="p-2 text-vault-text-secondary hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10 rounded-xl transition-all"
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                        title={sidebarOpen ? 'Fermer le panneau' : 'Ouvrir le panneau'}
-                    >
-                        {sidebarOpen ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
-                    </button>
-                    
-                    <div className="flex items-center gap-2.5">
-                         <div className="w-8 h-8 rounded-md border border-white/20 bg-black/50 shadow-[0_0_15px_rgba(255,255,255,0.05)] backdrop-blur-md flex items-center justify-center">
-                            <Logo size={16} className="text-white" />
-                        </div>
-                        <h1 className="font-bold text-xl tracking-tight text-white">VEIL</h1>
-                    </div>
+  return (
+    <div className="min-h-screen bg-v-bg text-v-t1 flex flex-col font-['Inter'] selection:bg-[rgba(99,102,241,0.3)] selection:text-white">
+      {/* Ambient bg */}
+      <div className="fixed inset-0 dot-grid opacity-100 pointer-events-none z-0" />
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/3 w-[600px] h-[300px] bg-v-accent opacity-[0.025] blur-[120px] rounded-full" />
+        <div className="absolute bottom-0 right-1/4 w-[400px] h-[300px] bg-[#c084fc] opacity-[0.025] blur-[100px] rounded-full" />
+      </div>
 
-                    {role === 'admin' ? (
-                        <button
-                            className="ml-4 px-3 py-1.5 flex items-center gap-2 bg-vault-warning/10 text-vault-warning border border-vault-warning/20 rounded-lg text-sm font-medium hover:bg-vault-warning/20 transition-all shadow-[0_0_10px_rgba(245,158,11,0.2)]"
-                            onClick={() => setView('admin')}
-                            title="Administration Système"
-                        >
-                            <Settings size={16} />
-                            <span>Admin</span>
-                        </button>
-                    ) : (
-                        <button
-                            className="ml-4 p-1.5 text-vault-text-muted hover:text-white hover:bg-white/5 rounded-lg transition-all"
-                            onClick={() => setShowPromoteModal(true)}
-                            title="Activer le mode Admin"
-                        >
-                            <Lock size={16} />
-                        </button>
-                    )}
-                </div>
+      {/* ── HEADER ── */}
+      <header className="sticky top-0 z-50 h-[60px] flex items-center px-4 lg:px-6 gap-4 glass-heavy border-b border-[rgba(255,255,255,0.06)]">
+        {/* Left: Sidebar toggle + Brand */}
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="w-8 h-8 rounded-lg border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] hover:bg-[rgba(255,255,255,0.07)] hover:border-[rgba(255,255,255,0.14)] text-v-t3 hover:text-v-t2 flex items-center justify-center transition-all duration-200 cursor-pointer"
+            title={sidebarOpen ? 'Réduire le panneau' : 'Ouvrir le panneau'}
+          >
+            {sidebarOpen ? <PanelLeftClose size={15} /> : <PanelLeftOpen size={15} />}
+          </button>
 
-                <div className="flex-1 max-w-lg mx-auto">
-                    <SearchBar />
-                </div>
-
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2.5 px-4 py-2 bg-[#111] border border-white/5 rounded-full shadow-inner">
-                        <KeyRound size={14} className="text-vault-text-primary opacity-60" />
-                        <span className="font-mono text-sm tracking-wide text-white/90">{email}</span>
-                    </div>
-                    <button 
-                        className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-red-500/10 text-vault-text-secondary hover:text-red-500 border border-transparent hover:border-red-500/30 rounded-full text-sm font-medium transition-all group"
-                        onClick={logout} 
-                        title="Fermer le coffre"
-                    >
-                        <LogOut size={16} className="group-hover:-translate-x-0.5 transition-transform" />
-                        <span>Verrouiller</span>
-                    </button>
-                </div>
-            </header>
-
-            {/* Body */}
-            <div className="flex flex-1 overflow-hidden relative z-10 p-6 gap-6">
-                
-                {/* Sidebar (Bento Box) */}
-                <aside className={`transition-all duration-300 ease-in-out flex flex-col gap-6 ${sidebarOpen ? 'w-72 opacity-100 translate-x-0' : 'w-0 opacity-0 -translate-x-10 overflow-hidden'}`}>
-                    <div className="bg-glass-heavy flex-1 rounded-3xl p-5 flex flex-col gap-6 overflow-y-auto custom-scrollbar">
-                        
-                        {/* ZK Status */}
-                        <div className="flex items-center gap-3 px-4 py-3 bg-[#111] border border-white/10 rounded-2xl">
-                            <div className="p-1.5 bg-green-500/10 rounded-lg text-green-500 shadow-[0_0_10px_rgba(34,197,94,0.1)]">
-                                <Zap size={16} className="fill-current" />
-                            </div>
-                            <span className="font-mono text-[0.8rem] uppercase tracking-wider text-green-500 font-semibold">Zero-Knowledge</span>
-                        </div>
-
-                        <TagFilter />
-                        
-                        <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent my-2"></div>
-                        
-                        <ActivityFeed />
-                    </div>
-                </aside>
-
-                {/* Main Content (Bento Layout) */}
-                <main className="flex-1 flex flex-col gap-6 overflow-y-auto min-w-0 pr-2 custom-scrollbar">
-                    {/* Upload Section Bento */}
-                    <section className="bg-glass rounded-3xl p-6 flex flex-col shadow-xl">
-                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-white">
-                             <span className="w-1.5 h-6 rounded-full bg-white shadow-[0_0_10px_rgba(255,255,255,0.2)]"></span>
-                             Upload Sécurisé
-                             <span className="ml-2 px-2 py-0.5 bg-white/10 text-white text-xs font-mono rounded-md border border-white/20 opacity-80">AES-256-GCM</span>
-                        </h2>
-                        <div className="flex-1 min-h-[160px]">
-                            <FileUploader />
-                        </div>
-                    </section>
-
-                    {/* Files Section Bento */}
-                    <section className="bg-glass rounded-3xl p-6 flex flex-col flex-1 shadow-xl">
-                        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-white">
-                             <span className="w-1.5 h-6 rounded-full bg-zinc-500 shadow-[0_0_10px_rgba(255,255,255,0.1)]"></span>
-                             Mon Coffre-fort
-                        </h2>
-                        <div className="flex-1 min-h-0">
-                            <FileList />
-                        </div>
-                    </section>
-                </main>
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-lg glass flex items-center justify-center">
+              <Logo size={16} />
             </div>
-
-            {/* Toasts */}
-            <div className="fixed bottom-6 right-6 z-[100] flex flex-col gap-3 pointer-events-none">
-                {toasts.map(toast => (
-                    <div key={toast.id} className="pointer-events-auto flex items-center gap-3 min-w-[300px] px-4 py-3 bg-[#111] backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl animate-[fadeInUp_0.4s_ease-out]">
-                        {toastIcon(toast.type)}
-                        <span className="flex-1 text-sm font-medium text-white/90">{toast.message}</span>
-                        <button className="p-1 hover:bg-white/10 rounded-lg text-vault-text-muted hover:text-white transition-colors" onClick={() => removeToast(toast.id)}>
-                            <X size={14} />
-                        </button>
-                    </div>
-                ))}
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-sm tracking-widest text-white">VEIL</span>
+              <span className="text-[9px] font-mono text-v-accent bg-v-accent/10 border border-v-accent/25 px-1.5 py-0.5 rounded-md tracking-widest uppercase">OS</span>
             </div>
+          </div>
 
-            {/* Promote Modal */}
-            {showPromoteModal && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-[fadeIn_0.3s_ease-out]">
-                    <div className="bg-[#111] border border-white/10 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-[scaleIn_0.3s_ease-out]">
-                        <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
-                            <h3 className="font-semibold text-lg flex items-center gap-2">
-                                <Settings size={18} className="text-vault-warning" />
-                                Élévation de privilèges
-                            </h3>
-                            <button className="p-1.5 text-vault-text-muted hover:text-white hover:bg-white/10 rounded-lg transition-colors" onClick={() => { setShowPromoteModal(false); clearError(); }}>
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <form onSubmit={handlePromote} className="p-6">
-                            <p className="text-vault-text-secondary text-sm mb-5">Veuillez entrer la clé de sécurité pour activer les fonctions d'administration système.</p>
-                            
-                            <div className="relative flex items-center bg-[#151515] border border-white/10 rounded-xl px-4 focus-within:border-vault-warning focus-within:shadow-[0_0_0_2px_rgba(245,158,11,0.2)] transition-all">
-                                <KeyRound className="text-vault-text-muted flex-shrink-0 mr-3" size={18} />
-                                <input
-                                    type="password"
-                                    placeholder="Clé de sécurité admin"
-                                    value={adminKey}
-                                    onChange={(e) => setAdminKey(e.target.value)}
-                                    autoFocus
-                                    required
-                                    className="w-full bg-transparent border-none text-white text-sm py-3 outline-none placeholder-vault-text-muted/50"
-                                />
-                            </div>
-                            
-                            {error && <div className="mt-3 text-red-500 text-sm flex items-center gap-1.5"><AlertCircle size={14}/>{error}</div>}
-                            
-                            <div className="mt-6 flex justify-end gap-3">
-                                <button type="button" className="px-4 py-2 bg-transparent text-vault-text-secondary hover:text-white rounded-lg text-sm font-medium transition-colors" onClick={() => { setShowPromoteModal(false); clearError(); }}>
-                                    Annuler
-                                </button>
-                                <button type="submit" className="px-4 py-2 bg-vault-warning/20 text-vault-warning border border-vault-warning/30 hover:bg-vault-warning/30 rounded-lg text-sm font-medium transition-colors disabled:opacity-50" disabled={isLoading}>
-                                    {isLoading ? 'Vérification...' : 'Activer'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+          {/* Admin badge */}
+          {role === 'admin' ? (
+            <button
+              onClick={() => setView('admin')}
+              className="ml-1 flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold text-v-warn bg-v-warn/10 border border-v-warn/25 rounded-lg hover:bg-v-warn/20 transition-all cursor-pointer"
+            >
+              <Settings size={12} />
+              Admin
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowPromoteModal(true)}
+              className="ml-1 w-7 h-7 rounded-lg text-v-t3 hover:text-v-t2 hover:bg-white/5 flex items-center justify-center transition-all cursor-pointer"
+              title="Activer le mode Admin"
+            >
+              <Lock size={13} />
+            </button>
+          )}
         </div>
-    );
+
+        {/* Center: Search */}
+        <div className="flex-1 max-w-md mx-auto">
+          <SearchBar />
+        </div>
+
+        {/* Right: User + Logout */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* ZK status pill */}
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full border border-v-success/20 bg-v-success/5">
+            <div className="status-online" />
+            <span className="text-[10px] font-mono text-v-success uppercase tracking-widest">ZK Active</span>
+          </div>
+
+          {/* User email */}
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)]">
+            <KeyRound size={12} className="text-v-t3 flex-shrink-0" />
+            <span className="font-mono text-xs text-v-t1 max-w-[140px] truncate">{email}</span>
+          </div>
+
+          {/* Logout */}
+          <button
+            onClick={logout}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-[rgba(255,255,255,0.07)] bg-[rgba(255,255,255,0.03)] hover:border-v-danger/30 hover:bg-v-danger/5 hover:text-v-danger text-v-t3 text-xs font-medium transition-all duration-200 cursor-pointer group"
+          >
+            <LogOut size={13} className="group-hover:-translate-x-0.5 transition-transform" />
+            <span className="hidden sm:inline">Verrouiller</span>
+          </button>
+        </div>
+      </header>
+
+      {/* ── BODY ── */}
+      <div className="flex flex-1 overflow-hidden relative z-10">
+
+        {/* Sidebar */}
+        <aside className={`flex-shrink-0 transition-all duration-300 ease-in-out overflow-hidden
+          ${sidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0'}`}
+        >
+          <div className={`h-full flex flex-col gap-0 border-r border-[rgba(255,255,255,0.06)] bg-[rgba(4,4,16,0.5)] transition-all duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-4'}`}>
+
+            {/* Sidebar: Storage stats */}
+            <div className="p-4 border-b border-[rgba(255,255,255,0.05)]">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-mono text-v-t3 uppercase tracking-widest">Coffre-fort</span>
+                <span className="text-[10px] font-mono text-v-accent">{files?.length ?? 0} fichiers</span>
+              </div>
+              {/* Encryption status */}
+              <div className="flex items-center gap-2 p-2.5 rounded-xl border border-v-success/15 bg-v-success/5">
+                <ShieldCheck size={13} className="text-v-success flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] font-mono text-v-success uppercase tracking-wider leading-none">Chiffrement Actif</p>
+                  <p className="text-[9px] text-v-t3 font-mono mt-0.5">AES-256-GCM · ZK</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sidebar: Navigation */}
+            <div className="p-3 border-b border-[rgba(255,255,255,0.05)]">
+              <p className="text-[9px] font-mono text-v-t3 uppercase tracking-widest px-2 mb-2">Navigation</p>
+              {[
+                { id: 'vault', label: 'Mon Coffre', icon: <Lock size={14} />, count: files?.length },
+                { id: 'upload', label: 'Upload Sécurisé', icon: <Upload size={14} />, count: uploadQueue.length > 0 ? uploadQueue.length : undefined },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveSection(item.id as 'vault' | 'upload')}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150 cursor-pointer mb-1
+                    ${activeSection === item.id
+                      ? 'bg-v-accent/15 text-v-accent-2 border border-v-accent/20'
+                      : 'text-v-t2 hover:bg-white/5 border border-transparent'
+                    }`}
+                >
+                  <span className={activeSection === item.id ? 'text-v-accent' : 'text-v-t3'}>{item.icon}</span>
+                  <span className="flex-1 text-left">{item.label}</span>
+                  {item.count !== undefined && item.count > 0 && (
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-md ${activeSection === item.id ? 'bg-v-accent/20 text-v-accent' : 'bg-white/8 text-v-t3'}`}>
+                      {item.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Sidebar: Tags */}
+            <div className="p-3 border-b border-[rgba(255,255,255,0.05)]">
+              <p className="text-[9px] font-mono text-v-t3 uppercase tracking-widest px-2 mb-3">Filtres</p>
+              <TagFilter />
+            </div>
+
+            {/* Sidebar: Activity */}
+            <div className="flex-1 overflow-hidden flex flex-col p-3 min-h-0">
+              <p className="text-[9px] font-mono text-v-t3 uppercase tracking-widest px-2 mb-3">Activité</p>
+              <div className="flex-1 overflow-y-auto custom-scroll min-h-0">
+                <ActivityFeed />
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 min-w-0 overflow-y-auto custom-scroll p-5 lg:p-6 flex flex-col gap-5">
+
+          {/* Section: Upload */}
+          {activeSection === 'upload' && (
+            <section className="animate-fade-up">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <span className="w-1 h-5 rounded-full bg-v-accent inline-block" />
+                    Upload Sécurisé
+                    <span className="ml-1 text-[10px] font-mono text-v-accent bg-v-accent/10 border border-v-accent/20 px-2 py-0.5 rounded-md">AES-256-GCM</span>
+                  </h2>
+                  <p className="text-v-t3 text-xs mt-0.5 ml-3">Chiffrement local avant transmission réseau</p>
+                </div>
+                <button
+                  onClick={() => setActiveSection('vault')}
+                  className="text-xs text-v-t3 hover:text-v-t2 transition-colors cursor-pointer"
+                >
+                  ← Retour au coffre
+                </button>
+              </div>
+              <div className="glass rounded-2xl p-5">
+                <FileUploader />
+              </div>
+            </section>
+          )}
+
+          {/* Section: Vault */}
+          {activeSection === 'vault' && (
+            <section className="flex-1 flex flex-col min-h-0 animate-fade-up">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <span className="w-1 h-5 rounded-full bg-v-t3 inline-block" />
+                    Mon Coffre-fort
+                  </h2>
+                  <p className="text-v-t3 text-xs mt-0.5 ml-3">Documents chiffrés et distribués</p>
+                </div>
+                <button
+                  onClick={() => setActiveSection('upload')}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-v-accent text-white rounded-lg hover:bg-v-accent-2 shadow-[0_2px_12px_rgba(99,102,241,0.3)] transition-all cursor-pointer"
+                >
+                  <Upload size={12} />
+                  Upload
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">
+                <FileList />
+              </div>
+            </section>
+          )}
+        </main>
+      </div>
+
+      {/* ── TOASTS ── */}
+      <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 pointer-events-none">
+        {toasts.map((toast) => {
+          const cfg = toastConfig(toast.type);
+          return (
+            <div
+              key={toast.id}
+              className="pointer-events-auto flex items-center gap-3 min-w-[300px] max-w-sm px-4 py-3 glass-heavy rounded-2xl shadow-2xl animate-slide-right"
+            >
+              <span className={`flex-shrink-0 ${cfg.cls}`}>{cfg.icon}</span>
+              <span className="flex-1 text-sm font-medium text-v-t1 leading-snug">{toast.message}</span>
+              <button
+                onClick={() => removeToast(toast.id)}
+                className="flex-shrink-0 p-1 rounded-lg text-v-t3 hover:text-v-t1 hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X size={13} />
+              </button>
+              {/* Color bar */}
+              <div className={`absolute bottom-0 left-0 h-0.5 w-full rounded-b-2xl ${cfg.bar} opacity-40`} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── PROMOTE MODAL ── */}
+      {showPromoteModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fade-in">
+          <div className="glass-heavy rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
+            <div className="px-6 py-4 border-b border-[rgba(255,255,255,0.06)] flex items-center justify-between">
+              <h3 className="font-semibold text-base flex items-center gap-2 text-white">
+                <Settings size={16} className="text-v-warn" />
+                Élévation de privilèges
+              </h3>
+              <button
+                onClick={() => { setShowPromoteModal(false); clearError(); }}
+                className="p-1.5 rounded-lg text-v-t3 hover:text-v-t1 hover:bg-white/10 transition-colors cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <form onSubmit={handlePromote} className="p-6 flex flex-col gap-4">
+              <p className="text-v-t2 text-sm">
+                Entrez la clé de sécurité pour activer les fonctions d'administration système.
+              </p>
+              <div className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition-all bg-[rgba(8,8,20,0.8)]
+                focus-within:border-v-warn/50 focus-within:shadow-[0_0_0_2px_rgba(245,158,11,0.15)] border-[rgba(255,255,255,0.07)]`}
+              >
+                <KeyRound size={15} className="text-v-t3 flex-shrink-0" />
+                <input
+                  type="password"
+                  placeholder="Clé de sécurité admin"
+                  value={adminKey}
+                  onChange={(e) => setAdminKey(e.target.value)}
+                  autoFocus
+                  required
+                  className="flex-1 bg-transparent border-none outline-none text-v-t1 text-sm placeholder-v-t3"
+                />
+              </div>
+              {error && (
+                <div className="flex items-center gap-2 text-v-danger text-sm">
+                  <AlertCircle size={14} />
+                  {error}
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setShowPromoteModal(false); clearError(); }}
+                  className="px-4 py-2 text-sm text-v-t2 hover:text-v-t1 hover:bg-white/5 rounded-lg transition-colors cursor-pointer"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="px-4 py-2 text-sm font-semibold bg-v-warn/15 text-v-warn border border-v-warn/30 hover:bg-v-warn/25 rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {isLoading ? 'Vérification...' : 'Activer'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }

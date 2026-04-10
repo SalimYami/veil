@@ -26,23 +26,36 @@ def init_db(database_url: str) -> None:
     Initialize database connection pool.
     
     Args:
-        database_url: PostgreSQL connection string
-                     Format: postgresql://user:password@host:port/database
+        database_url: Database connection string.
+                     Supports PostgreSQL and SQLite (for local dev).
     """
     global _engine, _SessionLocal
     
-    logger.info(f"Initializing database connection to {database_url.split('@')[-1]}")
+    is_sqlite = database_url.startswith("sqlite")
+    display_url = database_url.split('@')[-1] if '@' in database_url else database_url
+    logger.info(f"Initializing database connection to {display_url}")
     
-    # Create engine with connection pooling
-    _engine = create_engine(
-        database_url,
-        poolclass=QueuePool,
-        pool_size=10,  # Number of connections to maintain
-        max_overflow=20,  # Additional connections when pool is full
-        pool_pre_ping=True,  # Verify connections before using
-        pool_recycle=3600,  # Recycle connections after 1 hour
-        echo=False  # Set to True for SQL query logging
-    )
+    if is_sqlite:
+        # SQLite doesn't support pool_size/max_overflow — use StaticPool for dev
+        from sqlalchemy.pool import StaticPool
+        _engine = create_engine(
+            database_url,
+            poolclass=StaticPool,
+            connect_args={"check_same_thread": False},
+            echo=False
+        )
+        logger.info("SQLite mode: using StaticPool (local dev)")
+    else:
+        # PostgreSQL with connection pooling
+        _engine = create_engine(
+            database_url,
+            poolclass=QueuePool,
+            pool_size=10,
+            max_overflow=20,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            echo=False
+        )
     
     # Create session factory
     _SessionLocal = sessionmaker(
@@ -52,6 +65,7 @@ def init_db(database_url: str) -> None:
     )
     
     logger.info("Database connection pool initialized successfully")
+
 
 
 def get_engine():
