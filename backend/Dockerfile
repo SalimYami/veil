@@ -1,30 +1,38 @@
-# Utilisation d'une image Python légère
-FROM python:3.12-slim
+# =============================================================================
+# Backend Dockerfile — Multi-stage (production + development)
+# =============================================================================
 
-# Empêcher Python de générer des fichiers .pyc et activer le buffering des logs
+# ── Stage commun : dépendances ──────────────────────────────────────────────
+FROM python:3.12-slim AS base
+
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Définir le répertoire de travail
 WORKDIR /app
 
-# Installer les dépendances système nécessaires pour psycopg2
+# Dépendances système (psycopg2, gcc)
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copier les fichiers de dépendances
 COPY requirements.txt .
-
-# Installer les dépendances Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copier le reste du code
+
+# ── Stage développement (hot-reload) ────────────────────────────────────────
+FROM base AS development
+
+# Le code sera monté via volume (docker-compose volume mount)
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]
+
+
+# ── Stage production ─────────────────────────────────────────────────────────
+FROM base AS production
+
 COPY . .
 
-# Exposer le port utilisé par FastAPI
 EXPOSE 8000
-
-# Commande pour lancer l'application avec uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2", "--log-level", "info"]

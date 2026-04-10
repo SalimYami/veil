@@ -231,6 +231,7 @@ class Token(BaseModel):
     user_id: uuid.UUID
     role: str = "user"
     expires_in: int
+    salt: Optional[str] = None  # Uniquement retourné lors de l'inscription
 
 
 class RefreshTokenRequest(BaseModel):
@@ -269,8 +270,6 @@ class FileMetadata(BaseModel):
     size: int
     mime_type: Optional[str] = None
     tags: List[str] = []
-    created_at: datetime
-
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -891,17 +890,7 @@ async def admin_stats(admin: dict = Depends(get_admin_user)):
 
 
 # =============================================================================
-# STARTUP/SHUTDOWN EVENTS
-# =============================================================================
-
-# =============================================================================
-# MAIN
-# =============================================================================
-
-
-
-# =============================================================================
-# MAIN
+# ENTRY POINT
 # =============================================================================
 
 if __name__ == "__main__":

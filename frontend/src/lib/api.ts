@@ -10,8 +10,8 @@
 
 import axios from 'axios';
 
-// URL de base de l'API (en développement)
-const API_BASE_URL = 'http://localhost:8000';
+// URL de base de l'API — utilise la variable d'env Vite en prod, fallback localhost en dev
+const API_BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
 
 // Instance Axios configurée
 const api = axios.create({
@@ -19,6 +19,7 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
+    timeout: 30000, // 30s timeout
 });
 
 // =============================================================================
@@ -31,6 +32,7 @@ export interface AuthResponse {
     user_id: string;
     role: string;
     expires_in: number;
+    salt?: string;  // Retourné uniquement lors de l'inscription
 }
 
 export interface FileMetadata {
@@ -248,7 +250,7 @@ export async function getAdminDashboard(token: string): Promise<AdminDashboard> 
  * Promeut l'utilisateur au rang d'admin avec une clé secrète
  */
 export async function promoteToAdmin(token: string, secretKey: string): Promise<{ role: string }> {
-    const response = await api.post('/api/auth/promote',
+    const response = await api.post('/api/auth/promote-admin',
         { secret_key: secretKey },
         { headers: { Authorization: `Bearer ${token}` } }
     );

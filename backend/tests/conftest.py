@@ -14,6 +14,7 @@ os.environ.update({
     "VEIL_SECRET_KEY": "test-secret-key-for-pytest-only-32chars!!",
     "VEIL_REFRESH_SECRET_KEY": "test-refresh-key-for-pytest-32chars!!",
     "VEIL_ADMIN_KEY": "test-admin-key",
+    "SALT_HMAC_SECRET": "test-salt-hmac-secret-for-pytest-32chars!!",
     "MINIO_ENDPOINT": "localhost:9000",
     "MINIO_EXTERNAL_ENDPOINT": "http://localhost:9000",
     "MINIO_ACCESS_KEY": "minioadmin",
@@ -98,14 +99,21 @@ def db_session():
     """
     Database session for repository tests.
     Uses the engine configured in the environment (SQLite for tests).
+    Initialise la DB si ce n'est pas encore fait (tests sans fixture 'client').
     """
     from sqlalchemy.orm import sessionmaker
-    from database.connection import get_engine, Base
-    
-    engine = get_engine()
+    from database.connection import init_db, get_engine, Base
+
+    # Initialiser la DB si elle n'a pas déjà été initialisée
+    try:
+        engine = get_engine()
+    except RuntimeError:
+        init_db(os.environ["DATABASE_URL"])
+        engine = get_engine()
+
     # Ensure tables exist in the test database
     Base.metadata.create_all(bind=engine)
-    
+
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     session = SessionLocal()
     try:

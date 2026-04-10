@@ -92,7 +92,8 @@ class AuthService:
                 "token_type": "bearer",
                 "user_id": str(user.id),
                 "role": user.role,
-                "expires_in": self.access_token_expire_minutes * 60
+                "expires_in": self.access_token_expire_minutes * 60,
+                "salt": salt  # Retourné SEULEMENT à l'inscription pour dériver les bonnes clés
             }
     
     def login_user(self, email: str, auth_hash: str) -> dict:
@@ -187,8 +188,6 @@ class AuthService:
                 # Verify token is in database and not revoked
                 if not TokenRepository.verify_refresh_token(db, user_id, refresh_token):
                     raise ValueError("Token revoked or invalid")
-                if not user:
-                    raise ValueError("User not found")
                 
                 # Generate new access token
                 new_access_token = self._create_access_token(user.id)
