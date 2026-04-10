@@ -1,27 +1,27 @@
 @import "tailwindcss";
 
 @theme {
-  --color-vault-bg-primary: #030305;
-  --color-vault-bg-secondary: #0A0A0F;
-  --color-vault-bg-tertiary: #111118;
+  --color-vault-bg-primary: #000000;
+  --color-vault-bg-secondary: #0A0A0A;
+  --color-vault-bg-tertiary: #141414;
 
-  --color-vault-primary: #2563EB;
-  --color-vault-primary-glow: rgba(37, 99, 235, 0.4);
-  --color-vault-secondary: #3B82F6;
+  --color-vault-primary: #FFFFFF;
+  --color-vault-primary-glow: rgba(255, 255, 255, 0.15);
+  --color-vault-secondary: #A1A1AA;
   --color-vault-success: #10B981;
-  --color-vault-error: #F43F5E;
+  --color-vault-error: #EF4444;
   --color-vault-warning: #F59E0B;
 
-  --color-vault-text-primary: #F1F5F9;
-  --color-vault-text-secondary: #94A3B8;
-  --color-vault-text-muted: #475569;
+  --color-vault-text-primary: #FAFAFA;
+  --color-vault-text-secondary: #A1A1AA;
+  --color-vault-text-muted: #52525B;
 
-  --font-sans: 'Outfit', -apple-system, sans-serif;
-  --font-mono: 'Geist Mono', monospace;
+  --font-sans: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Geist Mono', monospace;
 }
 
 :root {
-  font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -40,21 +40,25 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background-color: var(--color-vault-bg-primary);
+  background-image: 
+    linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 ::selection {
-  background: var(--color-vault-primary);
+  background: rgba(255,255,255,0.2);
   color: white;
 }
 
-/* Custom Utilities that Tailwind struggles with naturally (complex meshes) */
+/* Custom Utilities */
 @layer utilities {
   .bg-glass {
-    @apply bg-vault-bg-secondary/60 backdrop-blur-3xl border border-white/5;
+    @apply bg-black/40 backdrop-blur-2xl border border-white/10;
   }
   
   .bg-glass-heavy {
-    @apply bg-vault-bg-tertiary/80 backdrop-blur-md border border-white/10;
+    @apply bg-black/60 backdrop-blur-3xl border border-white/10;
   }
   
   .text-glow {
@@ -62,18 +66,16 @@ body {
   }
   
   .animate-float {
-    animation: float 6s ease-in-out infinite;
+    animation: float 8s ease-in-out infinite;
   }
   
   .bg-mesh {
-    background: radial-gradient(circle at 10% 20%, rgba(37, 99, 235, 0.08) 0%, transparent 40%),
-                radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
-                url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%232563eb' fill-opacity='0.03'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.05) 0%, transparent 60%);
   }
 }
 
 @keyframes float {
-  0% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-20px) rotate(2deg); }
-  100% { transform: translateY(0px) rotate(0deg); }
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
 }
