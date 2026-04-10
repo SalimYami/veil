@@ -12,7 +12,7 @@
 import { useAuthStore } from './store/authStore';
 import { AuthForm } from './components/AuthForm';
 import { Dashboard } from './components/Dashboard';
-import { Shield, LockKeyhole, Cpu } from 'lucide-react';
+import { LockKeyhole, Cpu } from 'lucide-react';
 import { Logo } from './components/Logo';
 import './App.css';
 
@@ -24,60 +24,59 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-vault-bg-primary text-vault-text-primary flex overflow-hidden selection:bg-white selection:text-black pb-30 lg:pb-0">
+    <div className="min-h-screen bg-[#000] text-zinc-300 flex overflow-hidden selection:bg-white selection:text-black pb-30 lg:pb-0">
       
       {/* Left Panel - Visuals & Branding (Hidden on mobile) */}
-      <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 bg-mesh border-r border-white/5">
+      <div className="hidden lg:flex lg:w-[45%] relative flex-col justify-between p-14 bg-[#050505] border-r border-white/5">
         <div className="relative z-10 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg border border-white/20 bg-black/50 shadow-[0_0_20px_rgba(255,255,255,0.05)] backdrop-blur-md flex items-center justify-center">
-            <Logo size={20} className="text-white" />
+          <div className="text-white">
+            <Logo size={28} />
           </div>
-          <span className="font-sans font-bold text-xl tracking-tight text-white">VEIL</span>
+          <span className="font-sans font-semibold text-xl tracking-tight text-white">VEIL</span>
         </div>
 
-        <div className="relative z-10 max-w-lg mt-20 animate-float">
-          <h1 className="text-6xl font-bold tracking-tighter mb-6 text-white leading-[1.1]">
-            The Ultra-Secure <br /> 
-            <span className="text-vault-text-secondary">Zero-Knowledge</span> <br />
-            Vault.
+        <div className="relative z-10 max-w-md mt-16">
+          <h1 className="text-5xl font-semibold tracking-tight mb-6 text-white leading-[1.15]">
+            Enterprise-grade <br /> 
+            <span className="text-zinc-500">Zero-Knowledge</span> <br />
+            Infrastructure.
           </h1>
-          <p className="text-vault-text-secondary text-lg mb-12 leading-relaxed font-light max-w-md">
-            Une architecture de pointe où le chiffrement se fait dans votre navigateur. 
-            Aucun compromis sur la vie privée.
+          <p className="text-zinc-400 text-base mb-12 leading-relaxed font-normal">
+            Le chiffrement de bout en bout exécuté intégralement dans votre navigateur. Conçu pour les professionnels exigeant une confidentialité absolue.
           </p>
 
           <div className="grid grid-cols-1 gap-6">
-            <div className="flex items-start gap-5 transition-all group">
-              <div className="p-3 rounded-lg border border-white/10 bg-white/5 text-vault-text-secondary group-hover:text-white group-hover:border-white/30 transition-colors">
-                <LockKeyhole size={20} />
+            <div className="flex items-start gap-4">
+              <div className="pt-0.5 text-zinc-500">
+                <LockKeyhole size={18} />
               </div>
               <div>
-                <h3 className="text-white font-medium mb-1">Architecture Trustless</h3>
-                <p className="text-sm text-vault-text-muted leading-relaxed">Mathématiquement impossible pour Veil de lire vos fichiers, même en cas de brèche critique.</p>
+                <h3 className="text-white font-medium text-sm mb-1">Cryptographie Trustless</h3>
+                <p className="text-sm text-zinc-500 leading-relaxed">Mathématiquement impossible pour Veil de déchiffrer ou d'accéder à vos documents internes.</p>
               </div>
             </div>
-            <div className="flex items-start gap-5 transition-all group">
-              <div className="p-3 rounded-lg border border-white/10 bg-white/5 text-vault-text-secondary group-hover:text-white group-hover:border-white/30 transition-colors">
-                <Cpu size={20} />
+            <div className="flex items-start gap-4">
+              <div className="pt-0.5 text-zinc-500">
+                <Cpu size={18} />
               </div>
               <div>
-                <h3 className="text-white font-medium mb-1">Stockage Décentralisé</h3>
-                <p className="text-sm text-vault-text-muted leading-relaxed">Vos paquets chiffrés sont stockés en sécurité via des protocoles hautement cryptographiques.</p>
+                <h3 className="text-white font-medium text-sm mb-1">Architecture Distribuée</h3>
+                <p className="text-sm text-zinc-500 leading-relaxed">Vos paquets chiffrés sont stockés en haute disponibilité via des data centers sécurisés.</p>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="relative z-10 flex items-center justify-between text-xs text-vault-text-muted font-mono tracking-wider uppercase w-full max-w-lg">
-          <span>Enterprise Grade</span>
-          <span>v2.0.0</span>
+        <div className="relative z-10 flex items-center justify-between text-[11px] text-zinc-600 font-mono tracking-widest uppercase w-full">
+          <span>Enterprise Edition</span>
+          <span>Build 2.1.0</span>
         </div>
       </div>
 
       {/* Right Panel - Auth Form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-vault-bg-primary relative">
-        <div className="absolute inset-0 bg-gradient-to-br from-black via-black to-zinc-950"></div>
-        <div className="w-full max-w-md relative z-10">
+      <div className="w-full lg:w-[55%] flex items-center justify-center p-6 lg:p-12 bg-[#000] relative">
+        <div className="absolute inset-0 bg-mesh opacity-30"></div>
+        <div className="w-full max-w-[400px] relative z-10">
           <AuthForm />
         </div>
       </div>
