@@ -7,31 +7,31 @@
    ================================================================ */
 
 @theme {
-  /* ── Surfaces (Midnight Blue scale) ── */
-  --color-v-bg:       #030712; /* Gray 950 */
-  --color-v-surface:  #0a0f1c; /* Very dark blue-gray */
-  --color-v-elevated: #111827; /* Gray 900 */
-  --color-v-overlay:  #030712;
+  /* ── Surfaces (Ultra dark midnight blue) ── */
+  --color-v-bg:       #020408; /* Pure dark blue */
+  --color-v-surface:  #0d1117; /* Very dark blue-gray */
+  --color-v-elevated: #161b22; /* Slightly elevated */
+  --color-v-overlay:  #020408;
 
-  /* ── Brand (Cold Blue / Indigo) ── */
+  /* ── Brand (Cool indigo / electric blue — refined) ── */
   --color-v-accent:   #2563eb; /* Blue 600 */
   --color-v-accent-h: #3b82f6; /* Blue 500 */
-  --color-v-accent-l: #1d4ed8; /* Blue 700 */
-  --color-v-accent-s: rgba(59, 130, 246, 0.12);
+  --color-v-accent-l: #1e40af; /* Blue 800 */
+  --color-v-accent-s: rgba(37, 99, 235, 0.1);
 
   /* ── Semantic ── */
-  --color-v-success:  #059669; /* Emerald 600 */
-  --color-v-danger:   #dc2626; /* Red 600 */
-  --color-v-warn:     #d97706; /* Amber 600 */
-  --color-v-info:     #0284c7; /* Light Blue 600 */
+  --color-v-success:  #10b981; /* Emerald 500 (softer) */
+  --color-v-danger:   #ef4444; /* Red 500 (softer) */
+  --color-v-warn:     #f59e0b; /* Amber 500 */
+  --color-v-info:     #0ea5e9; /* Sky 500 */
 
-  /* ── Text ── */
-  --color-v-t1: #f8fafc; /* Slate 50 */
-  --color-v-t2: #94a3b8; /* Slate 400 */
-  --color-v-t3: #475569; /* Slate 600 */
+  /* ── Text (off-white to slate gradient) ── */
+  --color-v-t1: #f1f5f9; /* Slate 100 — primary text */
+  --color-v-t2: #cbd5e1; /* Slate 300 — secondary text */
+  --color-v-t3: #64748b; /* Slate 500 — tertiary text */
   --color-v-t4: #1e293b; /* Slate 800 */
 
-  /* ── Borders ── */
+  /* ── Borders (very subtle, almost invisible) ── */
   --color-v-border:   #1e293b; /* Slate 800 */
   --color-v-border-l: #334155; /* Slate 700 */
 
@@ -76,7 +76,13 @@ body {
 }
 
 .premium-shadow {
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.surface-card {
+  background: var(--color-v-surface);
+  border: 1px solid var(--color-v-border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* ── Animations ── */

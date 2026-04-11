@@ -15,10 +15,10 @@ function Input({
   const inputType = toggle ? (show ? 'text' : 'password') : type;
 
   return (
-    <div className={`flex items-center gap-3 h-12 px-4 rounded-lg border transition-colors duration-150
+    <div className={`flex items-center gap-3 h-12 px-4 rounded-lg border transition-all duration-200
       ${focused
-        ? 'border-v-accent bg-v-accent/[0.04]'
-        : 'border-v-border bg-v-surface hover:border-v-border-l'}`}
+        ? 'border-v-accent bg-v-accent/[0.05] shadow-[0_0_0_3px_rgba(37,99,235,0.1)]'
+        : 'border-v-border bg-v-surface/60 hover:border-v-border-l hover:bg-v-surface'}`}
     >
       {icon && <span className={`flex-shrink-0 transition-colors ${focused ? 'text-v-accent' : 'text-v-t3'}`}>{icon}</span>}
       <input
@@ -98,18 +98,18 @@ export function AuthForm() {
   const err = localError || error;
 
   return (
-    <div className="w-full bg-v-surface premium-shadow border border-v-border rounded-2xl overflow-hidden anim-up">
-      <div className="p-8">
+    <div className="w-full bg-v-surface border border-v-border/50 rounded-2xl overflow-hidden anim-up shadow-[0_2px_8px_rgba(0,0,0,0.4)]">
+      <div className="p-8 lg:p-10">
         
         {/* Header content / Title */}
         <div className="mb-8">
-          <h2 className="text-[22px] font-bold text-v-t1 tracking-tight mb-2">
+          <h2 className="text-[24px] font-bold text-v-t1 tracking-tight mb-2">
             {isLogin ? 'Accéder au coffre' : 'Créer un coffre'}
           </h2>
           <p className="text-[13px] text-v-t3 leading-relaxed">
             {isLogin
-              ? 'Saisissez vos identifiants. Votre clé de déchiffrement sera dérivée en toute sécurité.'
-              : 'Générez un nouveau coffre-fort. Vos clés d\'accès master ne quittent jamais votre navigateur.'}
+              ? 'Dérivation sécurisée en local. Aucune clé stockée sur nos serveurs.'
+              : 'Vos clés maîtres restent privées. Aucun backdoor possible.'}
           </p>
         </div>
 
@@ -179,17 +179,17 @@ export function AuthForm() {
             <button
               type="submit"
               disabled={isLoading}
-              className={`w-full h-12 rounded-lg text-[14px] font-semibold transition-all duration-150
+              className={`w-full h-12 rounded-lg text-[14px] font-semibold transition-all duration-200
                 flex items-center justify-center gap-2 cursor-pointer
                 ${isLoading
-                  ? 'bg-v-accent/60 text-white/70 cursor-wait'
-                  : 'bg-v-accent hover:bg-v-accent-h text-white shadow-[0_2px_4px_rgba(37,99,235,0.2),inset_0_1px_rgba(255,255,255,0.2)] hover:shadow-[0_4px_8px_rgba(37,99,235,0.3),inset_0_1px_rgba(255,255,255,0.2)]'
+                  ? 'bg-v-accent/50 text-white/60 cursor-wait'
+                  : 'bg-v-accent hover:bg-v-accent-h text-white shadow-[0_2px_6px_rgba(37,99,235,0.25)] hover:shadow-[0_4px_12px_rgba(37,99,235,0.35)]'
                 }`}
             >
               {isLoading ? (
-                <><Loader2 size={16} className="animate-spin" /> Dérivation...</>
+                <><Loader2 size={16} className="animate-spin" /> En cours...</>
               ) : (
-                <>{isLogin ? 'Déverrouiller le coffre' : 'Générer mes clés'} <ArrowRight size={15} /></>
+                <>{isLogin ? 'Accéder' : 'Créer le coffre'} <ArrowRight size={15} /></>
               )}
             </button>
           </div>
@@ -197,9 +197,9 @@ export function AuthForm() {
       </div>
 
       {/* Footer warning */}
-      <div className="bg-v-elevated border-t border-v-border p-4 px-8">
+      <div className="bg-v-elevated/40 border-t border-v-border/30 p-4 px-8">
         <p className="text-[12px] text-v-t3 leading-relaxed text-center">
-          En continuant, vous acceptez l'architecture Zero-Knowledge. <strong className="text-v-t2 font-medium">Nous ne pourrons pas réinitialiser votre mot de passe si vous le perdez.</strong>
+          Aucune récupération possible. <strong className="text-v-t2 font-medium">Conservez votre mot de passe précieusement.</strong>
         </p>
       </div>
     </div>
