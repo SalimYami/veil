@@ -2,7 +2,7 @@ import { useAuthStore } from './store/authStore';
 import { AuthForm } from './components/AuthForm';
 import { Dashboard } from './components/Dashboard';
 import { Logo } from './components/Logo';
-import { Lock, ArrowUpRight } from 'lucide-react';
+import { ShieldCheck, Cpu, Database, ArrowUpRight } from 'lucide-react';
 import './App.css';
 
 function App() {
@@ -14,79 +14,93 @@ function App() {
 
       {/* ── BACKGROUND EFFECTS ── */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        {/* Subtle grid */}
-        <div className="absolute inset-0 auth-grid opacity-20" />
-        
-        {/* Soft radial halo — very subtle */}
-        <div className="absolute top-1/2 left-1/2 w-[800px] h-[800px] -translate-x-1/2 -translate-y-1/2 bg-v-accent opacity-[0.02] blur-[140px] rounded-full mix-blend-screen" />
+        <div className="absolute inset-0 auth-grid opacity-15" />
+        <div className="absolute top-1/2 left-1/3 w-[900px] h-[900px] -translate-x-1/2 -translate-y-1/2 bg-v-accent opacity-[0.015] blur-[160px] rounded-full" />
       </div>
 
-      {/* ── LEFT — Premium branding & message (56%) ── */}
-      <aside className="relative z-10 w-full lg:w-[56%] flex flex-col justify-center px-6 py-12 lg:px-28 lg:py-20">
+      {/* ── LEFT COLUMN — Premium Branding (54%) ── */}
+      <aside className="relative z-10 w-full lg:w-[54%] flex flex-col px-8 py-12 lg:px-20 lg:py-16 xl:px-28">
         
-        {/* Logo & Brand */}
-        <div className="flex items-center gap-3 mb-20 lg:mb-32">
-          <div className="w-10 h-10 rounded-xl bg-v-elevated border border-v-border/40 flex items-center justify-center text-v-accent">
-            <Logo size={22} />
+        {/* Logo & Brand Mark */}
+        <div className="flex items-center gap-3.5 mb-auto">
+          <div className="w-11 h-11 rounded-xl bg-v-elevated border border-v-border flex items-center justify-center text-v-accent">
+            <Logo size={24} />
           </div>
-          <span className="text-[18px] font-semibold tracking-[0.02em] text-v-t1">VEIL</span>
+          <span className="text-lg font-semibold tracking-wide text-v-t1">VEIL</span>
         </div>
 
-        {/* Status Badge */}
-        <div className="flex items-center gap-2 mb-10 w-fit">
-          <div className="flex items-center gap-2 h-7 px-3 rounded-full border border-v-success/20 bg-v-success/8">
-            <div className="w-1.5 h-1.5 rounded-full bg-v-success" />
-            <span className="text-[10px] font-medium text-v-success uppercase tracking-widest">Secure by design</span>
+        {/* Hero Content — Centered vertically */}
+        <div className="flex-1 flex flex-col justify-center py-16 lg:py-24">
+          
+          {/* Status Badge */}
+          <div className="flex items-center gap-2 mb-8">
+            <div className="flex items-center gap-2.5 h-8 px-4 rounded-full border border-v-success/20 bg-v-success/[0.06]">
+              <div className="w-1.5 h-1.5 rounded-full bg-v-success animate-pulse" />
+              <span className="text-[11px] font-medium text-v-success uppercase tracking-widest">Zero-Knowledge Active</span>
+            </div>
+          </div>
+
+          {/* Premium Headline */}
+          <h1 className="text-[44px] lg:text-[52px] xl:text-[58px] font-bold leading-[1.06] tracking-[-0.025em] text-v-t1 mb-5 max-w-[580px] text-balance">
+            Confidentialité par architecture.
+          </h1>
+
+          {/* Subheading */}
+          <p className="text-base lg:text-[17px] text-v-t2 leading-relaxed max-w-[520px] mb-12">
+            Vos clés de chiffrement sont dérivées localement et ne quittent jamais votre appareil. Aucun serveur ne peut lire vos données.
+          </p>
+
+          {/* Trust Signals — Premium Cards */}
+          <div className="flex flex-col gap-4 max-w-[540px]">
+            
+            <div className="flex items-start gap-4 p-5 rounded-xl border border-v-border/60 bg-v-surface/30 backdrop-blur-sm hover:bg-v-surface/50 transition-colors">
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-v-elevated border border-v-border flex items-center justify-center text-v-accent">
+                <ShieldCheck size={18} />
+              </div>
+              <div className="pt-0.5">
+                <h3 className="text-[14px] font-semibold text-v-t1 mb-1.5">Chiffrement AES-256-GCM</h3>
+                <p className="text-[13px] text-v-t3 leading-relaxed">Standard militaire. Le serveur ne voit que des données inintelligibles.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 p-5 rounded-xl border border-v-border/60 bg-v-surface/30 backdrop-blur-sm hover:bg-v-surface/50 transition-colors">
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-v-elevated border border-v-border flex items-center justify-center text-v-accent">
+                <Cpu size={18} />
+              </div>
+              <div className="pt-0.5">
+                <h3 className="text-[14px] font-semibold text-v-t1 mb-1.5">Dérivation Argon2id</h3>
+                <p className="text-[13px] text-v-t3 leading-relaxed">Clés maîtres générées sur votre appareil, sans transfert réseau.</p>
+              </div>
+            </div>
+
+            <div className="flex items-start gap-4 p-5 rounded-xl border border-v-border/60 bg-v-surface/30 backdrop-blur-sm hover:bg-v-surface/50 transition-colors">
+              <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-v-elevated border border-v-border flex items-center justify-center text-v-accent">
+                <Database size={18} />
+              </div>
+              <div className="pt-0.5">
+                <h3 className="text-[14px] font-semibold text-v-t1 mb-1.5">Architecture Zero-Knowledge</h3>
+                <p className="text-[13px] text-v-t3 leading-relaxed">Aucune backdoor. Si vous perdez votre clé, vos données sont irrécupérables.</p>
+              </div>
+            </div>
+
           </div>
         </div>
 
-        {/* Hero Headline — VERY MINIMAL */}
-        <h1 className="text-[48px] lg:text-[56px] font-bold leading-[1.08] tracking-[-0.02em] text-v-t1 mb-6 max-w-[540px]">
-          Chiffré avant transit.
-        </h1>
-
-        {/* Subheading — Single line, minimal */}
-        <p className="text-[15px] lg:text-[16px] text-v-t2 leading-relaxed max-w-[480px] mb-16">
-          Clés dérivées localement. Zero-knowledge par architecture.
-        </p>
-
-        {/* Trust Indicators — Compact, elegant */}
-        <div className="flex flex-col gap-3 mb-20 max-w-[520px]">
-          <div className="flex items-start gap-3 p-4 rounded-lg border border-v-border/30 bg-v-surface/20 backdrop-blur-sm">
-            <Lock size={16} className="text-v-accent mt-0.5 flex-shrink-0" />
-            <div className="text-[13px] text-v-t2">
-              <span className="font-medium text-v-t1">AES-256-GCM</span> — Chiffrement côté client
-            </div>
-          </div>
-          <div className="flex items-start gap-3 p-4 rounded-lg border border-v-border/30 bg-v-surface/20 backdrop-blur-sm">
-            <Lock size={16} className="text-v-accent mt-0.5 flex-shrink-0" />
-            <div className="text-[13px] text-v-t2">
-              <span className="font-medium text-v-t1">Argon2id</span> — Dérivation de clé locale
-            </div>
-          </div>
-          <div className="flex items-start gap-3 p-4 rounded-lg border border-v-border/30 bg-v-surface/20 backdrop-blur-sm">
-            <Lock size={16} className="text-v-accent mt-0.5 flex-shrink-0" />
-            <div className="text-[13px] text-v-t2">
-              <span className="font-medium text-v-t1">Irrécupérable</span> — Pas de backdoor, pas de clé maître serveur
-            </div>
-          </div>
-        </div>
-
-        {/* Footer Links */}
-        <div className="flex items-center gap-4 text-[11px] font-medium text-v-t3 mt-auto">
-          <span>© 2026 VEIL</span>
-          <a href="#" className="hover:text-v-accent transition-colors flex items-center gap-1">
-            Docs <ArrowUpRight size={11} />
+        {/* Footer */}
+        <div className="flex items-center gap-5 text-[12px] font-medium text-v-t3 mt-auto pt-8">
+          <span className="text-v-t3/60">2026 VEIL</span>
+          <a href="#" className="hover:text-v-t1 transition-colors flex items-center gap-1.5">
+            Documentation <ArrowUpRight size={12} />
           </a>
-          <a href="#" className="hover:text-v-accent transition-colors flex items-center gap-1">
-            Audit <ArrowUpRight size={11} />
+          <a href="#" className="hover:text-v-t1 transition-colors flex items-center gap-1.5">
+            Audit de securite <ArrowUpRight size={12} />
           </a>
         </div>
       </aside>
 
-      {/* ── RIGHT — Auth card (44%) ── */}
-      <main className="relative z-10 w-full lg:w-[44%] flex items-center justify-center p-6 lg:p-12 border-t lg:border-t-0 lg:border-l border-v-border/40 min-h-[500px] lg:min-h-screen">
-        <div className="w-full max-w-[420px]">
+      {/* ── RIGHT COLUMN — Auth Card (46%) ── */}
+      <main className="relative z-10 w-full lg:w-[46%] flex items-center justify-center p-8 lg:p-16 xl:p-20 border-t lg:border-t-0 lg:border-l border-v-border/50 min-h-[560px] lg:min-h-screen bg-v-surface/20">
+        <div className="w-full max-w-[440px]">
           <AuthForm />
         </div>
       </main>

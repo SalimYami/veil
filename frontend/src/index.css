@@ -2,42 +2,74 @@
 @import "tailwindcss";
 
 /* ================================================================
-   VEIL — Design System v6.0
-   SaaS Cyber Security · Premium Midnight Blue
+   VEIL — Design System v7.0 (Ultra-Premium)
+   Premium Cybersecurity · Refined Spacing System
    ================================================================ */
 
 @theme {
-  /* ── Surfaces (Ultra dark midnight blue) ── */
-  --color-v-bg:       #020408; /* Pure dark blue */
-  --color-v-surface:  #0d1117; /* Very dark blue-gray */
-  --color-v-elevated: #161b22; /* Slightly elevated */
+  /* ── Surfaces (Deep midnight blue palette) ── */
+  --color-v-bg:       #020408;
+  --color-v-surface:  #0a0e14;
+  --color-v-elevated: #141a23;
   --color-v-overlay:  #020408;
 
-  /* ── Brand (Cool indigo / electric blue — refined) ── */
-  --color-v-accent:   #2563eb; /* Blue 600 */
-  --color-v-accent-h: #3b82f6; /* Blue 500 */
-  --color-v-accent-l: #1e40af; /* Blue 800 */
-  --color-v-accent-s: rgba(37, 99, 235, 0.1);
+  /* ── Brand (Electric blue — sophisticated) ── */
+  --color-v-accent:   #2563eb;
+  --color-v-accent-h: #3b82f6;
+  --color-v-accent-l: #1e40af;
+  --color-v-accent-s: rgba(37, 99, 235, 0.08);
 
-  /* ── Semantic ── */
-  --color-v-success:  #10b981; /* Emerald 500 (softer) */
-  --color-v-danger:   #ef4444; /* Red 500 (softer) */
-  --color-v-warn:     #f59e0b; /* Amber 500 */
-  --color-v-info:     #0ea5e9; /* Sky 500 */
+  /* ── Semantic (Softer, premium tones) ── */
+  --color-v-success:  #10b981;
+  --color-v-danger:   #f87171;
+  --color-v-warn:     #fbbf24;
+  --color-v-info:     #38bdf8;
 
-  /* ── Text (off-white to slate gradient) ── */
-  --color-v-t1: #f1f5f9; /* Slate 100 — primary text */
-  --color-v-t2: #cbd5e1; /* Slate 300 — secondary text */
-  --color-v-t3: #64748b; /* Slate 500 — tertiary text */
-  --color-v-t4: #1e293b; /* Slate 800 */
+  /* ── Text (Refined hierarchy) ── */
+  --color-v-t1: #f8fafc; /* Slate 50 — headings, primary */
+  --color-v-t2: #94a3b8; /* Slate 400 — body text */
+  --color-v-t3: #475569; /* Slate 600 — tertiary, labels */
+  --color-v-t4: #1e293b; /* Slate 800 — disabled */
 
-  /* ── Borders (very subtle, almost invisible) ── */
-  --color-v-border:   #1e293b; /* Slate 800 */
-  --color-v-border-l: #334155; /* Slate 700 */
+  /* ── Borders ── */
+  --color-v-border:   #1e293b;
+  --color-v-border-l: #334155;
 
   /* ── Fonts ── */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* ── Premium Spacing Scale (8px grid) ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Typography Scale ── */
+  --text-xs: 11px;
+  --text-sm: 13px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+  --text-3xl: 36px;
+  --text-4xl: 48px;
+  --text-5xl: 60px;
+
+  /* ── Premium Shadows ── */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 0 20px rgba(37, 99, 235, 0.15);
 }
 
 /* ── Reset ── */
@@ -75,15 +107,44 @@ body {
   border: 1px solid var(--color-v-border);
 }
 
+/* ── Premium Surface Classes ── */
 .premium-shadow {
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .surface-card {
   background: var(--color-v-surface);
   border: 1px solid var(--color-v-border);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
+
+.surface-elevated {
+  background: var(--color-v-elevated);
+  border: 1px solid var(--color-v-border);
+  box-shadow: var(--shadow-md);
+}
+
+/* ── Premium Card Treatment ── */
+.card-premium {
+  background: var(--color-v-surface);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 
+    0 0 0 1px rgba(0, 0, 0, 0.3),
+    var(--shadow-lg),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
+}
+
+/* ── Focus Ring ── */
+.focus-ring {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  border-color: var(--color-v-accent) !important;
+}
+
+/* ── Text Utilities ── */
+.text-balance { text-wrap: balance; }
+.text-pretty { text-wrap: pretty; }
 
 /* ── Animations ── */
 @keyframes fadeIn {
