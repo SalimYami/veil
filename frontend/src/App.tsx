@@ -2,92 +2,91 @@ import { useAuthStore } from './store/authStore';
 import { AuthForm } from './components/AuthForm';
 import { Dashboard } from './components/Dashboard';
 import { Logo } from './components/Logo';
-import { ShieldCheck, Cpu, Database, ArrowUpRight } from 'lucide-react';
-import './App.css';
+import { Lock, Server, Key } from 'lucide-react';
 
 function App() {
   const { isAuthenticated } = useAuthStore();
   if (isAuthenticated) return <Dashboard />;
 
   return (
-    <div className="min-h-screen bg-v-bg flex flex-col lg:flex-row relative">
+    <div className="min-h-screen bg-background flex flex-col lg:flex-row relative overflow-hidden">
+      {/* Grid background */}
+      <div className="absolute inset-0 grid-bg opacity-30 z-0" />
 
-      {/* ── BACKGROUND EFFECTS ── */}
-      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        <div className="absolute inset-0 auth-grid opacity-30" />
-        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] bg-v-accent opacity-[0.03] blur-[100px] rounded-full mix-blend-screen" />
-        <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-v-info opacity-[0.02] blur-[120px] rounded-full mix-blend-screen" />
-      </div>
-
-      {/* ── LEFT — Brand panel (55%) ── */}
-      <aside className="relative z-10 w-full lg:w-[55%] flex flex-col justify-between px-8 py-10 lg:px-24 lg:py-16">
+      {/* Left column - Hero */}
+      <aside className="relative z-10 w-full lg:w-1/2 flex flex-col justify-between px-6 py-8 sm:px-10 sm:py-12 lg:px-16 lg:py-20">
         
-        {/* Top: Branding */}
+        {/* Top: Logo */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-v-elevated border border-v-border flex items-center justify-center text-v-accent premium-shadow">
-            <Logo size={20} />
+          <div className="w-10 h-10 rounded-lg bg-secondary border border-border/50 flex items-center justify-center text-primary">
+            <Logo size={22} />
           </div>
-          <span className="text-[17px] font-semibold tracking-wide text-v-t1">VEIL</span>
+          <span className="text-lg font-semibold tracking-tight text-foreground">VEIL</span>
         </div>
 
-        {/* Center: Hero & Features */}
-        <div className="mt-16 lg:mt-0 max-w-[480px]">
+        {/* Center: Hero content */}
+        <div className="flex-1 flex flex-col justify-center gap-8">
           
-          <div className="flex items-center gap-2 mb-8">
-            <div className="flex items-center gap-2 h-7 px-3 rounded-full border border-v-success/20 bg-v-success/10">
-              <div className="w-1.5 h-1.5 rounded-full bg-v-success shadow-[0_0_8px_rgba(5,150,105,0.8)]" />
-              <span className="text-[10px] font-medium text-v-success uppercase tracking-widest">Trustless Node Active</span>
+          {/* Badge */}
+          <div className="flex items-center gap-2 w-fit">
+            <span className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-secondary/40 border border-border/30 text-xs font-medium text-muted-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
+              Secure by Design
+            </span>
+          </div>
+
+          {/* Headline */}
+          <div className="space-y-4 max-w-lg">
+            <h1 className="text-5xl sm:text-6xl lg:text-6xl font-bold tracking-tight text-foreground leading-[1.1]">
+              Confidentialité par architecture.
+            </h1>
+            <p className="text-base sm:text-lg text-muted-foreground">
+              Les clés restent privées. Aucun serveur ne peut accéder à vos données.
+            </p>
+          </div>
+
+          {/* Features */}
+          <div className="space-y-3 max-w-xl pt-4">
+            <div className="flex gap-4 p-4 rounded-lg border border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
+              <Lock className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-foreground">AES-256-GCM</p>
+                <p className="text-xs text-muted-foreground">Military-grade encryption on client-side</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4 p-4 rounded-lg border border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
+              <Key className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-foreground">Argon2id</p>
+                <p className="text-xs text-muted-foreground">Key derivation happens locally, never transmitted</p>
+              </div>
+            </div>
+
+            <div className="flex gap-4 p-4 rounded-lg border border-border/50 bg-card/50 hover:bg-card/80 transition-colors">
+              <Server className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-foreground">Zero-Knowledge</p>
+                <p className="text-xs text-muted-foreground">No backdoors. Lost password = lost data</p>
+              </div>
             </div>
           </div>
-
-          <h1 className="text-[40px] lg:text-[52px] font-bold leading-[1.05] tracking-[-0.03em] text-v-t1 mb-6">
-            L'intégrité de vos données, <br className="hidden lg:block" />
-            <span className="text-v-accent">cryptographiquement prouvée.</span>
-          </h1>
-
-          <p className="text-[15px] lg:text-[16px] text-v-t2 leading-relaxed mb-12">
-            La première plateforme de stockage où même les administrateurs ne peuvent pas accéder à vos fichiers. Le déchiffrement n'a lieu que sur votre appareil.
-          </p>
-
-          <div className="space-y-3">
-            {[
-              { icon: <ShieldCheck size={16} />, title: "Chiffrement Client AES-256-GCM", desc: "Le protocole de chiffrement s'exécute localement. Le serveur ne voit que du bruit." },
-              { icon: <Cpu size={16} />, title: "Dérivation locale Argon2id", desc: "Vos clés maîtres sont générées à la volée sur votre matériel sans transfert réseau." },
-              { icon: <Database size={16} />, title: "Stockage Zero-Knowledge", desc: "Absence totale de backdoor. Si vous perdez vos clés, les données sont inaccessibles." },
-            ].map((feature, idx) => (
-              <div key={idx} className="flex gap-4 p-4 rounded-xl border border-v-border bg-v-surface/40 hover:bg-v-surface transition-colors">
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-v-elevated border border-v-border flex items-center justify-center text-v-t2">
-                  {feature.icon}
-                </div>
-                <div>
-                  <h3 className="text-[14px] font-semibold text-v-t1 mb-1">{feature.title}</h3>
-                  <p className="text-[13px] text-v-t3 leading-relaxed">{feature.desc}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
         </div>
 
-        {/* Bottom: Footer Links */}
-        <div className="mt-16 lg:mt-0 flex items-center gap-6 text-[12px] font-medium text-v-t3">
-          <span>© 2026 Veil Core OS</span>
-          <a href="#" className="hover:text-v-t1 transition-colors flex items-center gap-1">
-            Architecture Docs <ArrowUpRight size={12} />
-          </a>
-          <a href="#" className="hover:text-v-t1 transition-colors flex items-center gap-1">
-            Audit de sécurité <ArrowUpRight size={12} />
-          </a>
+        {/* Bottom: Footer */}
+        <div className="flex items-center gap-4 text-xs text-muted-foreground pt-8 border-t border-border/30">
+          <span>© 2026 VEIL</span>
+          <a href="#" className="hover:text-foreground transition-colors">Documentation</a>
+          <a href="#" className="hover:text-foreground transition-colors">Security Audit</a>
         </div>
       </aside>
 
-      {/* ── RIGHT — Auth form (45%) ── */}
-      <main className="relative z-10 w-full lg:w-[45%] flex items-center justify-center p-6 lg:p-16 border-t lg:border-t-0 lg:border-l border-v-border bg-v-surface/30 backdrop-blur-3xl min-h-[500px]">
-        <div className="w-full max-w-[440px]">
+      {/* Right column - Auth */}
+      <main className="relative z-10 w-full lg:w-1/2 flex items-center justify-center px-6 py-8 sm:px-10 sm:py-12 lg:px-16 lg:py-20 border-t lg:border-t-0 lg:border-l border-border/30 min-h-screen lg:min-h-screen bg-card/30">
+        <div className="w-full max-w-sm">
           <AuthForm />
         </div>
       </main>
-
     </div>
   );
 }
