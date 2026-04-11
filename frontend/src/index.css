@@ -2,37 +2,45 @@
 @import "tailwindcss";
 
 /* ================================================================
-   VEIL — Premium SaaS Design System (shadcn/ui inspired)
+   VEIL — Ultra Premium Design System (Midnight Navy)
    ================================================================ */
 
 @layer base {
   :root {
-    --background: 0 0% 3%;
-    --foreground: 0 0% 98%;
+    /* Background: Deep Midnight Navy/Black */
+    --background: 224 50% 2%; 
+    --foreground: 210 40% 98%;
     
-    --card: 0 0% 6%;
-    --card-foreground: 0 0% 98%;
+    /* Card: Slightly elevated dark panel */
+    --card: 224 45% 4%;
+    --card-foreground: 210 40% 98%;
     
-    --primary: 212 100% 50%;
-    --primary-foreground: 0 0% 0%;
+    /* Primary: Cold electric blue / Indigo */
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 100%;
     
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 98%;
+    /* Secondary: Deep muted surface */
+    --secondary: 224 40% 7%;
+    --secondary-foreground: 210 20% 85%;
     
-    --muted: 0 0% 36%;
-    --muted-foreground: 0 0% 63%;
+    /* Muted: Subtle texts */
+    --muted: 224 30% 10%;
+    --muted-foreground: 215 20% 60%;
     
-    --accent: 212 100% 50%;
-    --accent-foreground: 0 0% 0%;
+    /* Accent: For highlight borders/items */
+    --accent: 217 91% 60%;
+    --accent-foreground: 0 0% 100%;
     
-    --destructive: 0 84% 60%;
+    /* Destructive: Muted red */
+    --destructive: 350 70% 50%;
     --destructive-foreground: 0 0% 100%;
     
-    --border: 0 0% 14%;
-    --input: 0 0% 10%;
-    --ring: 212 100% 50%;
+    /* Borders: Ultra thin, barely visible */
+    --border: 224 30% 10%; 
+    --input: 224 35% 6%;
+    --ring: 217 91% 60%;
     
-    --radius: 8px;
+    --radius: 12px;
     
     --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
     --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
@@ -47,121 +55,126 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     font-feature-settings: "rounding-mode" 0;
   }
 }
 
 @layer components {
-  /* Button Variants */
-  .btn-primary {
-    @apply bg-primary text-primary-foreground px-6 py-2.5 rounded-lg font-medium
-           transition-all duration-200 hover:opacity-90 active:scale-95
+  /* Premium Inputs */
+  .input-base {
+    @apply w-full bg-input border border-border/80 rounded-xl px-4 py-3
+           text-foreground text-[15px] placeholder:text-muted-foreground
+           transition-all duration-300 focus:outline-none focus:border-primary/50
+           focus:ring-1 focus:ring-primary/50 focus:bg-background shadow-inner
            disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Premium Buttons */
+  .btn-primary {
+    @apply bg-primary text-primary-foreground px-8 py-3 rounded-xl font-medium text-[15px]
+           shadow-[0_0_20px_rgba(59,130,246,0.15)]
+           transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_25px_rgba(59,130,246,0.25)]
+           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-secondary {
-    @apply bg-secondary text-secondary-foreground px-6 py-2.5 rounded-lg font-medium
-           border border-border transition-all duration-200 hover:bg-secondary/80
-           active:scale-95 disabled:opacity-50;
+    @apply bg-secondary text-secondary-foreground px-8 py-3 rounded-xl font-medium text-[15px]
+           border border-border/50 transition-all duration-300 hover:bg-secondary/80 hover:border-border
+           active:scale-[0.98] disabled:opacity-50;
   }
 
   .btn-ghost {
-    @apply text-foreground px-6 py-2.5 rounded-lg font-medium
-           transition-all duration-200 hover:bg-secondary/50
-           active:scale-95 disabled:opacity-50;
+    @apply text-muted-foreground px-6 py-3 rounded-xl font-medium text-[15px]
+           transition-all duration-300 hover:text-foreground hover:bg-secondary/50
+           active:scale-[0.98] disabled:opacity-50;
   }
 
-  /* Input Base */
-  .input-base {
-    @apply w-full bg-input border border-border rounded-lg px-3.5 py-2.5
-           text-foreground text-sm placeholder:text-muted-foreground
-           transition-all duration-200 focus:outline-none focus:border-primary
-           focus:ring-2 focus:ring-ring focus:ring-opacity-20
-           disabled:opacity-50 disabled:cursor-not-allowed;
-  }
-
-  /* Card */
+  /* Core Card Object */
   .card {
-    @apply bg-card text-card-foreground rounded-lg border border-border overflow-hidden;
+    @apply bg-card text-card-foreground rounded-[20px] border border-border/50 overflow-hidden relative;
   }
 
-  /* Badge */
+  /* Badges */
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-           bg-secondary text-foreground;
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase
+           bg-secondary/80 border border-border/60 text-muted-foreground;
   }
 }
 
 @layer utilities {
   /* Scrollbar styling */
   ::-webkit-scrollbar {
-    @apply w-2;
+    @apply w-1.5 h-1.5;
   }
-
   ::-webkit-scrollbar-track {
-    @apply bg-background;
+    @apply bg-transparent;
   }
-
   ::-webkit-scrollbar-thumb {
-    @apply bg-secondary rounded-lg hover:bg-secondary/80;
+    @apply bg-border rounded-full hover:bg-muted-foreground/30 transition-colors;
   }
 
-  /* Text utilities */
+  /* Typography utilities */
   .text-balance {
     text-wrap: balance;
   }
 
-  /* Glassmorphism */
+  /* Refined Glass & Halos */
   .glass {
-    @apply bg-card/50 backdrop-blur-md border border-border/50;
+    @apply bg-card/40 backdrop-blur-xl border border-white/[0.04];
   }
 
-  /* Premium shadows */
+  /* Luxury Shadows */
   .shadow-premium {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .shadow-premium-lg {
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 }
 
 /* Animations */
-@keyframes slideUp {
+@keyframes slideUpFade {
   from {
     opacity: 0;
-    transform: translateY(8px);
+    transform: translateY(12px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+@keyframes fadeInSlow {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @layer utilities {
   .animate-slideUp {
-    animation: slideUp 0.3s ease-out;
+    animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
-
   .animate-fadeIn {
-    animation: fadeIn 0.3s ease-out;
+    animation: fadeInSlow 0.6s ease-out forwards;
   }
 }
 
-/* Grid background */
+/* Atmospheric Background */
 .grid-bg {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
-  background-size: 40px 40px;
+    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+  background-size: 50px 50px;
+  mask-image: radial-gradient(circle at center, black, transparent 80%);
+}
+
+.halo-glow {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, var(--primary) 0%, transparent 60%);
+  opacity: 0.04;
+  pointer-events: none;
+  filter: blur(80px);
 }

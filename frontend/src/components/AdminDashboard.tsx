@@ -35,127 +35,139 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
   const formatMB = (b: number) => (b / 1024 / 1024).toFixed(1);
 
   const stats = [
-    { label: 'Utilisateurs',    value: users.length, icon: <Users size={15} />,     color: 'text-v-accent' },
-    { label: 'Blobs stockés',   value: storage.length, icon: <FileText size={15} />,  color: 'text-v-info' },
-    { label: 'Stockage total',  value: `${formatMB(totalSize)} MB`, icon: <HardDrive size={15} />, color: 'text-v-warn' },
-    { label: 'Statut',          value: 'Actif', icon: <Shield size={15} />,            color: 'text-v-success' },
+    { label: 'Identities',    value: users.length, icon: <Users size={18} strokeWidth={1.5} />,     color: 'text-primary' },
+    { label: 'Sealed Blobs',  value: storage.length, icon: <FileText size={18} strokeWidth={1.5} />,  color: 'text-sky-400' },
+    { label: 'Vault Size',    value: `${formatMB(totalSize)} MB`, icon: <HardDrive size={18} strokeWidth={1.5} />, color: 'text-amber-400' },
+    { label: 'System Status', value: 'Active', icon: <Shield size={18} strokeWidth={1.5} />,            color: 'text-emerald-400' },
   ];
 
   return (
-    <div className="fixed inset-0 bg-v-bg text-v-t1 flex flex-col font-['Inter']">
+    <div className="fixed inset-0 bg-background text-foreground flex flex-col font-['Inter'] animate-fadeIn">
 
       {/* Header */}
-      <header className="flex-shrink-0 h-[52px] flex items-center px-4 gap-3 border-b border-v-border z-50">
+      <header className="flex-shrink-0 h-[72px] flex items-center px-8 gap-4 border-b border-white/[0.04] bg-card/60 backdrop-blur-xl z-50">
         <button onClick={onBack}
-          className="flex items-center gap-1.5 h-8 px-2.5 rounded-md text-[12px] text-v-t2 hover:text-v-t1 hover:bg-v-surface border border-v-border transition-colors cursor-pointer">
-          <ArrowLeft size={13} /> Retour
+          className="flex items-center gap-2 h-10 px-4 rounded-xl text-[13px] font-medium text-muted-foreground hover:text-white hover:bg-secondary border border-white/[0.04] transition-all duration-300 shadow-sm cursor-pointer">
+          <ArrowLeft size={16} /> Retreat
         </button>
-        <div className="h-5 w-px bg-v-border" />
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-md bg-v-warn/10 border border-v-warn/20 flex items-center justify-center text-v-warn">
-            <Logo size={14} />
+        <div className="h-6 w-px bg-white/[0.04] mx-2" />
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500 shadow-sm">
+            <Logo size={18} />
           </div>
-          <span className="text-[13px] font-semibold text-v-t1">Administration</span>
+          <div>
+            <span className="text-[15px] font-bold text-foreground tracking-tight block">Zero-Trust Administration</span>
+            <span className="text-[11px] font-mono text-muted-foreground uppercase tracking-widest">Command Center</span>
+          </div>
         </div>
         <div className="flex-1" />
-        <button onClick={fetchData} className="w-7 h-7 rounded-md border border-v-border bg-v-surface text-v-t3 hover:text-v-t2 flex items-center justify-center cursor-pointer transition-colors">
-          <RefreshCcw size={12} className={loading ? 'animate-spin' : ''} />
+        <button onClick={fetchData} className="w-10 h-10 rounded-xl border border-white/[0.04] bg-card hover:bg-secondary text-muted-foreground hover:text-white flex items-center justify-center shadow-sm cursor-pointer transition-all duration-300">
+          <RefreshCcw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
       </header>
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto scroll-thin">
-        <div className="max-w-4xl mx-auto p-6 space-y-6">
+        <div className="max-w-6xl mx-auto p-12 space-y-10">
 
           {/* Stats grid */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
             {stats.map(s => (
-              <div key={s.label} className="p-4 rounded-lg border border-v-border bg-v-surface">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className={s.color}>{s.icon}</span>
-                  <span className="text-[11px] text-v-t3 font-medium">{s.label}</span>
+              <div key={s.label} className="p-6 rounded-2xl border border-white/[0.04] bg-card shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`p-2 rounded-lg bg-secondary/80 border border-white/[0.02] ${s.color}`}>
+                    {s.icon}
+                  </div>
+                  <span className="text-[12px] text-muted-foreground font-semibold uppercase tracking-widest">{s.label}</span>
                 </div>
-                <p className="text-[22px] font-semibold text-v-t1 leading-none">{s.value}</p>
+                <p className="text-[32px] font-bold text-foreground leading-none tracking-tight">{s.value}</p>
               </div>
             ))}
           </div>
 
           {/* Users table */}
           <div>
-            <h2 className="text-[14px] font-semibold text-v-t1 mb-3 flex items-center gap-2">
-              <Users size={14} className="text-v-accent" /> Utilisateurs
+            <h2 className="text-[16px] font-bold tracking-tight text-foreground mb-4 flex items-center gap-2">
+              <Users size={18} className="text-primary" /> Active Identities
             </h2>
-            <div className="rounded-lg border border-v-border overflow-hidden">
+            <div className="rounded-2xl border border-white/[0.04] bg-card/40 overflow-hidden shadow-inner">
               {/* Header */}
-              <div className="flex items-center gap-3 px-4 py-2.5 bg-v-surface text-[11px] font-medium text-v-t3 uppercase tracking-wider border-b border-v-border">
-                <span className="flex-1">Email</span>
-                <span className="w-20 text-center">Rôle</span>
-                <span className="w-24 text-right">Inscription</span>
+              <div className="flex items-center gap-4 px-6 py-4 bg-secondary/40 text-[11px] font-bold text-muted-foreground uppercase tracking-widest border-b border-white/[0.02]">
+                <span className="flex-1">Cryptographic Identity (Email)</span>
+                <span className="w-24 text-center">Clearance</span>
+                <span className="w-32 text-right">Provisioned</span>
               </div>
               {loading ? (
                 Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-[44px] animate-pulse bg-v-surface/30 border-b border-v-border last:border-0" />
+                  <div key={i} className="h-[60px] animate-pulse bg-secondary/20 border-b border-white/[0.02] last:border-0" />
                 ))
               ) : users.length === 0 ? (
-                <p className="p-4 text-[12px] text-v-t3 text-center">Aucun utilisateur</p>
+                <p className="p-8 text-[13px] text-muted-foreground text-center font-medium">No identities recorded in secure enclave</p>
               ) : (
-                users.map(u => (
-                  <div key={u.email} className="flex items-center gap-3 px-4 py-3 border-b border-v-border last:border-0 hover:bg-v-surface/50 transition-colors">
-                    <span className="flex-1 text-[13px] text-v-t1 truncate">{u.email}</span>
-                    <span className={`w-20 text-center text-[11px] font-medium rounded-md px-2 py-0.5
-                      ${u.role === 'admin' ? 'bg-v-warn/10 text-v-warn' : 'bg-v-surface text-v-t3'}`}>
-                      {u.role}
-                    </span>
-                    <span className="w-24 text-right text-[11px] text-v-t3 font-mono">
-                      {new Date(u.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
-                    </span>
-                  </div>
-                ))
+                <div className="divide-y divide-white/[0.02]">
+                  {users.map(u => (
+                    <div key={u.email} className="flex items-center gap-4 px-6 py-4 bg-transparent hover:bg-secondary/40 transition-colors">
+                      <span className="flex-1 text-[14px] font-medium text-foreground truncate">{u.email}</span>
+                      <span className={`w-24 text-center text-[10px] uppercase font-bold tracking-widest rounded-lg px-2.5 py-1.5 border
+                        ${u.role === 'admin' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-secondary text-muted-foreground border-white/[0.02]'}`}>
+                        {u.role}
+                      </span>
+                      <span className="w-32 text-right text-[12px] text-muted-foreground font-mono">
+                        {new Date(u.created_at).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
 
           {/* Storage table */}
           <div>
-            <h2 className="text-[14px] font-semibold text-v-t1 mb-3 flex items-center gap-2">
-              <HardDrive size={14} className="text-v-info" /> Stockage chiffré
+            <h2 className="text-[16px] font-bold tracking-tight text-foreground mb-4 flex items-center gap-2">
+              <HardDrive size={18} className="text-sky-400" /> AES-256-GCM Encrypted Blob Storage
             </h2>
-            <div className="rounded-lg border border-v-border overflow-hidden">
-              <div className="flex items-center gap-3 px-4 py-2.5 bg-v-surface text-[11px] font-medium text-v-t3 uppercase tracking-wider border-b border-v-border">
-                <span className="flex-1">Hash SHA-256</span>
-                <span className="w-20 text-right">Taille</span>
-                <span className="w-24 text-right">Créé le</span>
+            <div className="rounded-2xl border border-white/[0.04] bg-card/40 overflow-hidden shadow-inner">
+              <div className="flex items-center gap-4 px-6 py-4 bg-secondary/40 text-[11px] font-bold text-muted-foreground uppercase tracking-widest border-b border-white/[0.02]">
+                <span className="flex-1">SHA-256 Checksum Identifier</span>
+                <span className="w-24 text-right">Ciphertext Size</span>
+                <span className="w-32 text-right">Ingested On</span>
               </div>
               {loading ? (
                 Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-[44px] animate-pulse bg-v-surface/30 border-b border-v-border last:border-0" />
+                  <div key={i} className="h-[60px] animate-pulse bg-secondary/20 border-b border-white/[0.02] last:border-0" />
                 ))
               ) : storage.length === 0 ? (
-                <p className="p-4 text-[12px] text-v-t3 text-center">Aucune donnée</p>
+                <p className="p-8 text-[13px] text-muted-foreground text-center font-medium">Vault architecture contains no blobs</p>
               ) : (
-                storage.slice(0, 50).map(e => (
-                  <div key={e.id} className="flex items-center gap-3 px-4 py-3 border-b border-v-border last:border-0 hover:bg-v-surface/50 transition-colors">
-                    <code className="flex-1 text-[11px] font-mono text-v-accent truncate">{e.hash}</code>
-                    <span className="w-20 text-right text-[11px] font-mono text-v-t3">
-                      {e.size < 1024 ? `${e.size} B` : e.size < 1048576 ? `${(e.size/1024).toFixed(0)} KB` : `${(e.size/1048576).toFixed(1)} MB`}
-                    </span>
-                    <span className="w-24 text-right text-[11px] text-v-t3 font-mono">
-                      {new Date(e.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
-                    </span>
-                  </div>
-                ))
+                <div className="divide-y divide-white/[0.02]">
+                  {storage.slice(0, 50).map(e => (
+                    <div key={e.id} className="flex items-center gap-4 px-6 py-4 bg-transparent hover:bg-secondary/40 transition-colors">
+                      <code className="flex-1 text-[13px] font-mono text-primary truncate max-w-[500px]">
+                        {e.hash}
+                      </code>
+                      <span className="w-24 text-right text-[12px] font-mono text-muted-foreground">
+                        {e.size < 1024 ? `${e.size} B` : e.size < 1048576 ? `${(e.size/1024).toFixed(0)} KB` : `${(e.size/1048576).toFixed(1)} MB`}
+                      </span>
+                      <span className="w-32 text-right text-[12px] text-muted-foreground font-mono">
+                        {new Date(e.created_at).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
 
           {/* ZK notice */}
-          <div className="flex items-start gap-3 p-4 rounded-lg border border-v-success/20 bg-v-success/[0.04]">
-            <Server size={15} className="text-v-success flex-shrink-0 mt-0.5" />
+          <div className="flex items-start gap-4 p-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.03] shadow-sm">
+            <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex-shrink-0 mt-0.5">
+               <Server size={18} className="text-emerald-400" />
+            </div>
             <div>
-              <p className="text-[12px] font-medium text-v-success mb-0.5">Garantie Zero-Knowledge</p>
-              <p className="text-[11px] text-v-t3 leading-relaxed">
-                Le serveur stocke exclusivement des blobs chiffrés AES-256-GCM. Aucun contenu
-                utilisateur n'est accessible côté serveur, y compris par les administrateurs.
+              <p className="text-[14px] font-bold tracking-tight text-emerald-400 mb-1">Cryptographic Immutability Guaranteed</p>
+              <p className="text-[13px] text-muted-foreground leading-relaxed">
+                The administrative layer acts strictly as a dumb data store for AES-256-GCM ciphertexts. Decryption key material and plaintext vectors are never transmitted over the wire, effectively isolating system administrators from client payload data by mathematical design constraint.
               </p>
             </div>
           </div>

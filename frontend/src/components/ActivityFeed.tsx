@@ -5,21 +5,21 @@ import { Upload, Download, Trash2, Tag, Activity } from 'lucide-react';
 function timeAgo(ts: string): string {
   const d = Date.now() - new Date(ts).getTime();
   const m = Math.floor(d / 60000);
-  if (m < 1) return 'À l\'instant';
-  if (m < 60) return `${m} min`;
+  if (m < 1) return 'Just now';
+  if (m < 60) return `${m} min ago`;
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h`;
+  if (h < 24) return `${h} hr ago`;
   const days = Math.floor(h / 24);
-  if (days === 1) return 'Hier';
-  if (days < 7) return `${days}j`;
-  return new Date(ts).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days} days ago`;
+  return new Date(ts).toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
 }
 
 const ACTIONS: Record<string, { icon: typeof Upload; label: string; color: string }> = {
-  upload:   { icon: Upload,   label: 'Upload',    color: 'text-v-success' },
-  download: { icon: Download, label: 'Download',  color: 'text-v-info' },
-  delete:   { icon: Trash2,   label: 'Supprimé',  color: 'text-v-danger' },
-  tag:      { icon: Tag,      label: 'Tag',        color: 'text-v-warn' },
+  upload:   { icon: Upload,   label: 'UPLOADED',  color: 'text-emerald-400' },
+  download: { icon: Download, label: 'ACCESSED',  color: 'text-sky-400' },
+  delete:   { icon: Trash2,   label: 'PURGED',    color: 'text-destructive' },
+  tag:      { icon: Tag,      label: 'TAGGED',    color: 'text-amber-400' },
 };
 
 export function ActivityFeed() {
@@ -28,27 +28,35 @@ export function ActivityFeed() {
 
   if (!activities || activities.length === 0) {
     return (
-      <div className="flex flex-col items-center py-10 text-center">
-        <Activity size={20} className="text-v-t3 mb-2 opacity-50" />
-        <p className="text-[12px] text-v-t3">Aucune activité récente</p>
+      <div className="flex flex-col items-center justify-center py-16 animate-fadeIn">
+         <div className="w-14 h-14 rounded-2xl bg-card border border-white/[0.04] flex items-center justify-center text-muted-foreground mb-4 shadow-sm">
+            <Activity size={24} strokeWidth={1.5} />
+         </div>
+         <p className="text-[14px] text-muted-foreground font-medium">No recent operations logged.</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-v-border divide-y divide-v-border overflow-hidden">
+    <div className="rounded-2xl border border-white/[0.04] bg-card/40 backdrop-blur-sm divide-y divide-white/[0.02] overflow-hidden max-w-4xl shadow-inner animate-fadeIn space-y-[1px]">
       {activities.slice(0, 25).map((entry, i) => {
-        const a = ACTIONS[entry.action] || { icon: Activity, label: entry.action, color: 'text-v-t3' };
+        const a = ACTIONS[entry.action] || { icon: Activity, label: entry.action.toUpperCase(), color: 'text-muted-foreground' };
         const Icon = a.icon;
         return (
-          <div key={`${entry.file_id}-${i}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-v-surface/50 transition-colors">
-            <Icon size={13} className={a.color} />
-            <div className="flex-1 min-w-0">
-              <p className="text-[12px] text-v-t1 truncate">{entry.file_name}</p>
-              {entry.details && <p className="text-[10px] text-v-t3 truncate">{entry.details}</p>}
+          <div key={`${entry.file_id}-${i}`} className="flex items-center gap-4 px-6 py-4 bg-transparent hover:bg-secondary/40 transition-colors">
+            <div className={`p-2 rounded-lg bg-secondary/80 ${a.color} shadow-sm border border-white/[0.02]`}>
+               <Icon size={16} />
             </div>
-            <span className={`text-[10px] font-mono flex-shrink-0 ${a.color}`}>{a.label}</span>
-            <span className="text-[10px] text-v-t3 flex-shrink-0 w-14 text-right font-mono">{timeAgo(entry.timestamp)}</span>
+            <div className="flex-1 min-w-0 pr-4">
+              <p className="text-[14px] font-semibold text-foreground truncate">{entry.file_name}</p>
+              {entry.details && <p className="text-[12px] text-muted-foreground mt-0.5 truncate">{entry.details}</p>}
+            </div>
+            <span className={`text-[11px] font-bold tracking-widest flex-shrink-0 bg-background/50 px-2.5 py-1 rounded-md border border-white/[0.02] ${a.color}`}>
+              {a.label}
+            </span>
+            <span className="text-[12px] text-muted-foreground flex-shrink-0 w-24 text-right font-medium opacity-80">
+              {timeAgo(entry.timestamp)}
+            </span>
           </div>
         );
       })}
