@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useAuthStore } from '../store/authStore';
-import { Loader2, ArrowRight, AlertCircle, Eye, EyeOff, Lock, Fingerprint } from 'lucide-react';
-import { Logo } from './Logo';
+import { Loader2, ArrowRight, Eye, EyeOff, Lock, Fingerprint, ShieldAlert } from 'lucide-react';
 
 /* ─── Input ─── */
 function Input({
@@ -16,7 +15,7 @@ function Input({
   const inputType = toggle ? (show ? 'text' : 'password') : type;
 
   return (
-    <div className={`flex items-center gap-3 h-11 px-3.5 rounded-lg border transition-colors duration-150
+    <div className={`flex items-center gap-3 h-12 px-4 rounded-lg border transition-colors duration-150
       ${focused
         ? 'border-v-accent bg-v-accent/[0.04]'
         : 'border-v-border bg-v-surface hover:border-v-border-l'}`}
@@ -38,7 +37,7 @@ function Input({
       {toggle && (
         <button type="button" onClick={() => setShow(!show)}
           className="flex-shrink-0 text-v-t3 hover:text-v-t2 transition-colors cursor-pointer p-0.5">
-          {show ? <EyeOff size={14} /> : <Eye size={14} />}
+          {show ? <EyeOff size={15} /> : <Eye size={15} />}
         </button>
       )}
     </div>
@@ -58,13 +57,13 @@ function PasswordMeter({ password }: { password: string }) {
   const color = score >= 3 ? 'bg-v-success' : score >= 2 ? 'bg-v-warn' : 'bg-v-danger';
 
   return (
-    <div className="flex items-center gap-2 anim-in">
-      <div className="flex-1 flex gap-1">
-        {[0,1,2,3].map(i => (
+    <div className="flex items-center gap-3 anim-in px-1">
+      <div className="flex-1 flex gap-1.5">
+        {[0, 1, 2, 3].map(i => (
           <div key={i} className={`h-[3px] flex-1 rounded-full transition-colors ${i < score ? color : 'bg-v-border'}`} />
         ))}
       </div>
-      <span className={`text-[10px] font-medium ${score >= 3 ? 'text-v-success' : score >= 2 ? 'text-v-warn' : 'text-v-danger'}`}>
+      <span className={`text-[11px] font-medium ${score >= 3 ? 'text-v-success' : score >= 2 ? 'text-v-warn' : 'text-v-danger'}`}>
         {label}
       </span>
     </div>
@@ -99,121 +98,109 @@ export function AuthForm() {
   const err = localError || error;
 
   return (
-    <div className="w-full anim-up">
-
-      {/* Mobile brand */}
-      <div className="lg:hidden flex items-center gap-2.5 mb-8">
-        <div className="w-8 h-8 rounded-lg bg-v-accent/10 border border-v-accent/20 flex items-center justify-center text-v-accent">
-          <Logo size={18} />
+    <div className="w-full bg-v-surface premium-shadow border border-v-border rounded-2xl overflow-hidden anim-up">
+      <div className="p-8">
+        
+        {/* Header content / Title */}
+        <div className="mb-8">
+          <h2 className="text-[22px] font-bold text-v-t1 tracking-tight mb-2">
+            {isLogin ? 'Accéder au coffre' : 'Créer un coffre'}
+          </h2>
+          <p className="text-[13px] text-v-t3 leading-relaxed">
+            {isLogin
+              ? 'Saisissez vos identifiants. Votre clé de déchiffrement sera dérivée en toute sécurité.'
+              : 'Générez un nouveau coffre-fort. Vos clés d\'accès master ne quittent jamais votre navigateur.'}
+          </p>
         </div>
-        <span className="text-[15px] font-semibold tracking-[0.08em]">VEIL</span>
-      </div>
 
-      {/* Title */}
-      <h2 className="text-[20px] font-semibold text-v-t1 mb-1">
-        {isLogin ? 'Connexion' : 'Créer un compte'}
-      </h2>
-      <p className="text-[13px] text-v-t3 mb-6">
-        {isLogin
-          ? 'Vos clés de chiffrement sont dérivées localement.'
-          : 'Votre mot de passe ne quitte jamais cet appareil.'}
-      </p>
-
-      {/* Tabs */}
-      <div className="flex rounded-lg border border-v-border bg-v-surface p-0.5 mb-6">
-        {(['login', 'register'] as const).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => switchMode(m)}
-            className={`flex-1 py-2 text-[13px] font-medium rounded-md transition-all duration-150 cursor-pointer
-              ${mode === m
-                ? 'bg-v-elevated text-v-t1 shadow-sm'
-                : 'text-v-t3 hover:text-v-t2'}`}
-          >
-            {m === 'login' ? 'Connexion' : 'Inscription'}
-          </button>
-        ))}
-      </div>
-
-      {/* Error */}
-      {err && (
-        <div className="flex items-center gap-2.5 p-3 mb-4 rounded-lg border border-v-danger/20 bg-v-danger/[0.06] anim-in">
-          <AlertCircle size={14} className="text-v-danger flex-shrink-0" />
-          <span className="text-[13px] text-v-danger">{err}</span>
+        {/* Tabs */}
+        <div className="flex rounded-lg border border-v-border bg-v-elevated p-1 mb-6">
+          {(['login', 'register'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => switchMode(m)}
+              className={`flex-1 flex justify-center items-center py-2 text-[13px] font-medium rounded-md transition-all duration-150 cursor-pointer
+                ${mode === m
+                  ? 'bg-v-surface text-v-t1 shadow-sm border border-v-border-l/50'
+                  : 'text-v-t3 hover:text-v-t2 border border-transparent'}`}
+            >
+              {m === 'login' ? 'Connexion' : 'Création'}
+            </button>
+          ))}
         </div>
-      )}
 
-      {/* Form */}
-      <form onSubmit={submit} className="space-y-3">
-        <Input
-          label="Adresse email"
-          type="email"
-          value={email}
-          onChange={setEmail}
-          icon={<Fingerprint size={14} />}
-          autoFocus
-          autoComplete="email"
-        />
-        <Input
-          label="Mot de passe"
-          type="password"
-          value={password}
-          onChange={setPassword}
-          icon={<Lock size={14} />}
-          toggle
-          minLength={8}
-          autoComplete={isLogin ? 'current-password' : 'new-password'}
-        />
-
-        {!isLogin && (
-          <div className="space-y-3 anim-in">
-            <PasswordMeter password={password} />
-            <Input
-              label="Confirmer le mot de passe"
-              type="password"
-              value={confirm}
-              onChange={setConfirm}
-              icon={<Lock size={14} />}
-              toggle
-              autoComplete="new-password"
-            />
+        {/* Error */}
+        {err && (
+          <div className="flex items-start gap-3 p-4 mb-6 rounded-lg border border-v-danger/20 bg-v-danger/[0.04] anim-in">
+            <ShieldAlert size={16} className="text-v-danger flex-shrink-0 mt-0.5" />
+            <span className="text-[13px] text-v-danger leading-relaxed">{err}</span>
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className={`w-full h-11 rounded-lg text-[13px] font-medium transition-all duration-150
-            flex items-center justify-center gap-2 cursor-pointer select-none
-            ${isLoading
-              ? 'bg-v-accent/60 text-white/70 cursor-wait'
-              : 'bg-v-accent hover:bg-v-accent-h active:bg-v-accent-l text-white shadow-[0_1px_2px_rgba(0,0,0,0.3),0_0_0_1px_rgba(99,102,241,0.4)]'
-            }`}
-        >
-          {isLoading ? (
-            <><Loader2 size={15} className="animate-spin" /> Dérivation des clés...</>
-          ) : (
-            <>{isLogin ? 'Se connecter' : 'Créer le compte'} <ArrowRight size={14} /></>
-          )}
-        </button>
-      </form>
+        {/* Form */}
+        <form onSubmit={submit} className="space-y-4">
+          <Input
+            label="Adresse email"
+            type="email"
+            value={email}
+            onChange={setEmail}
+            icon={<Fingerprint size={15} />}
+            autoFocus
+            autoComplete="email"
+          />
+          <Input
+            label="Mot de passe"
+            type="password"
+            value={password}
+            onChange={setPassword}
+            icon={<Lock size={15} />}
+            toggle
+            minLength={8}
+            autoComplete={isLogin ? 'current-password' : 'new-password'}
+          />
 
-      {/* ZK notice */}
-      <div className="mt-6 pt-6 border-t border-v-border">
-        <div className="flex gap-3">
-          <div className="flex-shrink-0 w-8 h-8 rounded-lg border border-v-border bg-v-surface flex items-center justify-center text-v-t3">
-            <Lock size={13} />
+          {!isLogin && (
+            <div className="space-y-4 pt-1 anim-in">
+              <PasswordMeter password={password} />
+              <Input
+                label="Confirmez le mot de passe"
+                type="password"
+                value={confirm}
+                onChange={setConfirm}
+                icon={<Lock size={15} />}
+                toggle
+                autoComplete="new-password"
+              />
+            </div>
+          )}
+
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full h-12 rounded-lg text-[14px] font-semibold transition-all duration-150
+                flex items-center justify-center gap-2 cursor-pointer
+                ${isLoading
+                  ? 'bg-v-accent/60 text-white/70 cursor-wait'
+                  : 'bg-v-accent hover:bg-v-accent-h text-white shadow-[0_2px_4px_rgba(37,99,235,0.2),inset_0_1px_rgba(255,255,255,0.2)] hover:shadow-[0_4px_8px_rgba(37,99,235,0.3),inset_0_1px_rgba(255,255,255,0.2)]'
+                }`}
+            >
+              {isLoading ? (
+                <><Loader2 size={16} className="animate-spin" /> Dérivation...</>
+              ) : (
+                <>{isLogin ? 'Déverrouiller le coffre' : 'Générer mes clés'} <ArrowRight size={15} /></>
+              )}
+            </button>
           </div>
-          <div>
-            <p className="text-[12px] font-medium text-v-t2 mb-0.5">Architecture Zero-Knowledge</p>
-            <p className="text-[11px] text-v-t3 leading-relaxed">
-              Le chiffrement AES-256-GCM s'exécute dans votre navigateur via Argon2id.
-              Le serveur ne reçoit que des données chiffrées.{' '}
-              <span className="text-v-danger">Récupération impossible.</span>
-            </p>
-          </div>
-        </div>
+        </form>
+      </div>
+
+      {/* Footer warning */}
+      <div className="bg-v-elevated border-t border-v-border p-4 px-8">
+        <p className="text-[12px] text-v-t3 leading-relaxed text-center">
+          En continuant, vous acceptez l'architecture Zero-Knowledge. <strong className="text-v-t2 font-medium">Nous ne pourrons pas réinitialiser votre mot de passe si vous le perdez.</strong>
+        </p>
       </div>
     </div>
   );

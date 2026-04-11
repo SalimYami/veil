@@ -2,38 +2,38 @@
 @import "tailwindcss";
 
 /* ================================================================
-   VEIL — Design System v5.0
-   Corporate SaaS · Production-grade
+   VEIL — Design System v6.0
+   SaaS Cyber Security · Premium Midnight Blue
    ================================================================ */
 
 @theme {
-  /* ── Surfaces ── */
-  --color-v-bg:       #09090b;
-  --color-v-surface:  #0f0f12;
-  --color-v-elevated: #18181b;
-  --color-v-overlay:  #1c1c20;
+  /* ── Surfaces (Midnight Blue scale) ── */
+  --color-v-bg:       #030712; /* Gray 950 */
+  --color-v-surface:  #0a0f1c; /* Very dark blue-gray */
+  --color-v-elevated: #111827; /* Gray 900 */
+  --color-v-overlay:  #030712;
 
-  /* ── Brand ── */
-  --color-v-accent:   #6366f1;
-  --color-v-accent-h: #7c7ff7;
-  --color-v-accent-l: #4f46e5;
-  --color-v-accent-s: rgba(99, 102, 241, 0.12);
+  /* ── Brand (Cold Blue / Indigo) ── */
+  --color-v-accent:   #2563eb; /* Blue 600 */
+  --color-v-accent-h: #3b82f6; /* Blue 500 */
+  --color-v-accent-l: #1d4ed8; /* Blue 700 */
+  --color-v-accent-s: rgba(59, 130, 246, 0.12);
 
   /* ── Semantic ── */
-  --color-v-success:  #10b981;
-  --color-v-danger:   #ef4444;
-  --color-v-warn:     #f59e0b;
-  --color-v-info:     #3b82f6;
+  --color-v-success:  #059669; /* Emerald 600 */
+  --color-v-danger:   #dc2626; /* Red 600 */
+  --color-v-warn:     #d97706; /* Amber 600 */
+  --color-v-info:     #0284c7; /* Light Blue 600 */
 
   /* ── Text ── */
-  --color-v-t1: #fafafa;
-  --color-v-t2: #a1a1aa;
-  --color-v-t3: #52525b;
-  --color-v-t4: #27272a;
+  --color-v-t1: #f8fafc; /* Slate 50 */
+  --color-v-t2: #94a3b8; /* Slate 400 */
+  --color-v-t3: #475569; /* Slate 600 */
+  --color-v-t4: #1e293b; /* Slate 800 */
 
   /* ── Borders ── */
-  --color-v-border:   #27272a;
-  --color-v-border-l: #3f3f46;
+  --color-v-border:   #1e293b; /* Slate 800 */
+  --color-v-border-l: #334155; /* Slate 700 */
 
   /* ── Fonts ── */
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
@@ -57,85 +57,74 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-::selection { background: rgba(99,102,241,0.3); color: #fff; }
+::selection { background: rgba(59, 130, 246, 0.3); color: #fff; }
 
-/* ── Scrollbars ── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-v-t4); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--color-v-t3); }
-
-/* ── Focus ring ── */
-:focus-visible {
-  outline: 2px solid var(--color-v-accent);
-  outline-offset: 2px;
-  border-radius: 8px;
+/* ── Patterns & Backgrounds ── */
+.auth-grid {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  mask-image: radial-gradient(circle at center, black, transparent 80%);
+  pointer-events: none;
 }
 
-/* ================================================================
-   KEYFRAMES — Subtle, fast, professional
-   ================================================================ */
+/* ── Utilities ── */
+.surface-overlay {
+  background: var(--color-v-bg);
+  border: 1px solid var(--color-v-border);
+}
 
+.premium-shadow {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -2px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ── Animations ── */
 @keyframes fadeIn {
   from { opacity: 0; }
-  to   { opacity: 1; }
+  to { opacity: 1; }
 }
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.97); }
-  to   { opacity: 1; transform: scale(1); }
+  to { opacity: 1; transform: scale(1); }
 }
 @keyframes slideRight {
-  from { opacity: 0; transform: translateX(16px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+  from { opacity: 0; transform: translateX(8px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
-/* ================================================================
-   UTILITIES
-   ================================================================ */
+.anim-in { animation: fadeIn 0.2s ease-out forwards; }
+.anim-up { animation: fadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.anim-scale { animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.anim-slide-r { animation: slideRight 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
-@layer utilities {
+/* ── Scrollbar ── */
+.scroll-thin::-webkit-scrollbar { width: 4px; height: 4px; }
+.scroll-thin::-webkit-scrollbar-track { background: transparent; }
+.scroll-thin::-webkit-scrollbar-thumb { background: var(--color-v-border-l); border-radius: 4px; }
+.scroll-thin::-webkit-scrollbar-thumb:hover { background: var(--color-v-t3); }
 
-  /* ── Surfaces ── */
-  .surface-1 {
-    background: var(--color-v-surface);
-    border: 1px solid var(--color-v-border);
-  }
-  .surface-2 {
-    background: var(--color-v-elevated);
-    border: 1px solid var(--color-v-border);
-  }
-  .surface-overlay {
-    background: rgba(9, 9, 11, 0.92);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid var(--color-v-border);
-  }
-
-  /* ── Animations ── */
-  .anim-in      { animation: fadeIn    0.2s ease-out forwards; }
-  .anim-up      { animation: fadeUp    0.3s cubic-bezier(0.16,1,0.3,1) forwards; }
-  .anim-scale   { animation: scaleIn  0.2s cubic-bezier(0.16,1,0.3,1) forwards; }
-  .anim-slide-r { animation: slideRight 0.25s cubic-bezier(0.16,1,0.3,1) forwards; }
-
-  /* ── Status dot ── */
-  .dot-live {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--color-v-success);
-    animation: pulse-dot 2s ease-in-out infinite;
-  }
-
-  /* ── Scrollbar ── */
-  .scroll-thin::-webkit-scrollbar { width: 4px; }
-  .scroll-thin::-webkit-scrollbar-track { background: transparent; }
-  .scroll-thin::-webkit-scrollbar-thumb { background: var(--color-v-t4); border-radius: 2px; }
+/* ── Pulse Status ── */
+.dot-live {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-v-success);
+  position: relative;
+}
+.dot-live::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid var(--color-v-success);
+  animation: ripple 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+@keyframes ripple {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
 }
