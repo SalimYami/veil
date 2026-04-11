@@ -1,51 +1,49 @@
 import { useFileStore } from '../store/fileStore';
-import { SlidersHorizontal, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 export function TagFilter() {
   const { allTags, activeTag, setActiveTag } = useFileStore();
 
-  if (!allTags || allTags.length === 0) return null;
+  if (!allTags || allTags.length === 0) {
+    return <p className="text-[12px] text-v-t3 py-4">Aucun tag créé.</p>;
+  }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <SlidersHorizontal size={11} className="text-v-t3" />
-          <span className="text-[9px] font-mono text-v-t3 uppercase tracking-widest">Filtres tags</span>
-        </div>
-        {activeTag && (
+    <div className="space-y-3">
+      {activeTag && (
+        <div className="flex items-center justify-between">
+          <span className="text-[12px] text-v-t2">
+            Filtre actif : <strong className="text-v-t1">{activeTag}</strong>
+          </span>
           <button
             onClick={() => setActiveTag(null)}
-            className="text-[9px] text-v-t3 hover:text-v-danger flex items-center gap-0.5 cursor-pointer transition-colors"
+            className="text-[11px] text-v-t3 hover:text-v-danger flex items-center gap-1 cursor-pointer transition-colors"
           >
-            <X size={9} />
-            reset
+            <X size={11} /> Effacer
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1.5">
         <button
-          className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-mono uppercase tracking-wider border transition-all cursor-pointer
-            ${activeTag === null
-              ? 'bg-v-accent/15 text-v-accent-2 border-v-accent/25'
-              : 'bg-transparent text-v-t3 border-[rgba(255,255,255,0.07)] hover:border-[rgba(255,255,255,0.12)] hover:text-v-t2'
-            }`}
           onClick={() => setActiveTag(null)}
+          className={`h-7 px-2.5 rounded-md text-[12px] font-medium border transition-colors cursor-pointer
+            ${!activeTag
+              ? 'bg-v-accent/10 text-v-accent border-v-accent/20'
+              : 'text-v-t3 border-v-border bg-v-surface hover:text-v-t2 hover:border-v-border-l'}`}
         >
           Tous
         </button>
         {allTags.map(tag => (
           <button
             key={tag}
-            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-mono uppercase tracking-wider border transition-all cursor-pointer
-              ${activeTag === tag
-                ? 'bg-v-accent/15 text-v-accent-2 border-v-accent/25 shadow-[0_0_8px_rgba(99,102,241,0.15)]'
-                : 'bg-transparent text-v-t3 border-[rgba(255,255,255,0.07)] hover:border-[rgba(255,255,255,0.12)] hover:text-v-t2'
-              }`}
             onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+            className={`h-7 px-2.5 rounded-md text-[12px] font-medium border transition-colors cursor-pointer
+              ${activeTag === tag
+                ? 'bg-v-accent/10 text-v-accent border-v-accent/20'
+                : 'text-v-t3 border-v-border bg-v-surface hover:text-v-t2 hover:border-v-border-l'}`}
           >
-            #{tag}
+            {tag}
           </button>
         ))}
       </div>

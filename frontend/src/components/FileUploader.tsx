@@ -1,179 +1,117 @@
 import { useState, useRef, useCallback } from 'react';
 import { useFileStore } from '../store/fileStore';
-import {
-  Upload, FileUp, Loader2, ShieldCheck, File as FileIcon,
-  CheckCircle2, AlertCircle, Clock, Lock
-} from 'lucide-react';
+import { Upload, FileUp, Loader2, File as FileIcon, CheckCircle2, AlertCircle, Clock, Lock } from 'lucide-react';
 
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  waiting:    { label: 'En attente',  color: 'text-v-t3',      bg: 'bg-white/5',         border: 'border-white/10' },
-  encrypting: { label: 'Chiffrement', color: 'text-v-accent',  bg: 'bg-v-accent/10',     border: 'border-v-accent/25' },
-  uploading:  { label: 'Upload',      color: 'text-v-info',    bg: 'bg-v-info/10',       border: 'border-v-info/25' },
-  done:       { label: 'Sécurisé',   color: 'text-v-success',  bg: 'bg-v-success/10',    border: 'border-v-success/25' },
-  error:      { label: 'Erreur',      color: 'text-v-danger',  bg: 'bg-v-danger/10',     border: 'border-v-danger/25' },
+const STATUS: Record<string, { label: string; color: string }> = {
+  waiting:    { label: 'En attente',  color: 'text-v-t3' },
+  encrypting: { label: 'Chiffrement', color: 'text-v-accent' },
+  uploading:  { label: 'Envoi',       color: 'text-v-info' },
+  done:       { label: 'Terminé',     color: 'text-v-success' },
+  error:      { label: 'Erreur',      color: 'text-v-danger' },
 };
 
 function StatusIcon({ status }: { status: string }) {
-  if (status === 'waiting')    return <Clock size={14} className="text-v-t3" />;
-  if (status === 'encrypting') return <Loader2 size={14} className="text-v-accent animate-spin" />;
-  if (status === 'uploading')  return <Loader2 size={14} className="text-v-info animate-spin" />;
-  if (status === 'done')       return <CheckCircle2 size={14} className="text-v-success" />;
-  if (status === 'error')      return <AlertCircle size={14} className="text-v-danger" />;
+  if (status === 'waiting')     return <Clock size={13} className="text-v-t3" />;
+  if (status === 'encrypting')  return <Loader2 size={13} className="text-v-accent animate-spin" />;
+  if (status === 'uploading')   return <Loader2 size={13} className="text-v-info animate-spin" />;
+  if (status === 'done')        return <CheckCircle2 size={13} className="text-v-success" />;
+  if (status === 'error')       return <AlertCircle size={13} className="text-v-danger" />;
   return null;
 }
 
 export function FileUploader() {
-  const [isDragging, setIsDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const ref = useRef<HTMLInputElement>(null);
   const { uploadFiles, isUploading, uploadQueue, uploadProgress } = useFileStore();
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
+  const onDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault(); setDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) await uploadFiles(files);
+    if (files.length) await uploadFiles(files);
   }, [uploadFiles]);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files && files.length > 0) await uploadFiles(Array.from(files));
-    if (fileInputRef.current) fileInputRef.current.value = '';
+  const onChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files?.length) await uploadFiles(Array.from(e.target.files));
+    if (ref.current) ref.current.value = '';
   };
 
-  const doneCount = uploadQueue.filter(q => q.status === 'done').length;
-  const totalCount = uploadQueue.length;
-
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-4">
+
       {/* Drop zone */}
       <div
-        className={`relative flex flex-col items-center justify-center min-h-[180px] rounded-2xl border-2 border-dashed transition-all duration-300 overflow-hidden cursor-pointer group
-          ${isUploading
-            ? 'border-v-accent/40 bg-v-accent/5 cursor-wait'
-            : isDragging
-              ? 'border-v-success/60 bg-v-success/8 scale-[1.01]'
-              : 'border-[rgba(255,255,255,0.1)] hover:border-v-accent/40 hover:bg-v-accent/5'
-          }`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => !isUploading && fileInputRef.current?.click()}
+        className={`relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed transition-colors cursor-pointer min-h-[160px]
+          ${isUploading ? 'border-v-accent/30 bg-v-accent/[0.03] cursor-wait'
+            : dragging   ? 'border-v-success/50 bg-v-success/[0.04]'
+            :              'border-v-border hover:border-v-border-l hover:bg-v-surface/50'}`}
+        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={(e) => { e.preventDefault(); setDragging(false); }}
+        onDrop={onDrop}
+        onClick={() => !isUploading && ref.current?.click()}
       >
-        <input ref={fileInputRef} type="file" multiple onChange={handleFileChange} className="hidden" />
-
-        {/* Ambient glow overlay on drag */}
-        {isDragging && (
-          <div className="absolute inset-0 bg-gradient-to-b from-v-success/5 to-transparent pointer-events-none" />
-        )}
+        <input ref={ref} type="file" multiple onChange={onChange} className="hidden" />
 
         {isUploading ? (
-          /* Upload in progress */
-          <div className="flex flex-col items-center gap-4 w-full px-10 py-6 animate-fade-in">
-            <div className="relative w-14 h-14">
-              <div className="absolute inset-0 rounded-full bg-v-accent/10 border border-v-accent/20 flex items-center justify-center">
-                <Loader2 size={24} className="text-v-accent animate-spin" />
-              </div>
-              <div className="absolute -inset-1 rounded-full border border-v-accent/10 animate-ping opacity-40" />
-            </div>
-            <div className="text-center w-full">
-              <p className="font-semibold text-white text-sm">
-                {uploadQueue[uploadQueue.findIndex(q => q.status === 'encrypting' || q.status === 'uploading')]?.status === 'encrypting'
-                  ? '🔐 Chiffrement en cours...'
-                  : '📡 Transmission sécurisée...'
-                }
+          <div className="flex flex-col items-center gap-3 py-6 anim-in">
+            <Loader2 size={24} className="text-v-accent animate-spin" />
+            <div className="text-center">
+              <p className="text-[13px] font-medium text-v-t1">
+                {uploadQueue.find(q => q.status === 'encrypting') ? 'Chiffrement en cours...' : 'Envoi sécurisé...'}
               </p>
-              <p className="text-xs text-v-t3 mt-1 font-mono">{doneCount} / {totalCount} fichiers</p>
-              {/* Progress bar */}
-              <div className="mt-4 w-full h-1.5 bg-[rgba(255,255,255,0.05)] rounded-full overflow-hidden border border-[rgba(255,255,255,0.05)]">
-                <div
-                  className="h-full bg-gradient-to-r from-v-accent to-v-accent-2 rounded-full transition-all duration-300 ease-out"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-              <span className="text-[11px] font-mono text-v-accent mt-1.5 block">{uploadProgress}%</span>
+              <p className="text-[11px] text-v-t3 mt-1 font-mono">
+                {uploadQueue.filter(q => q.status === 'done').length}/{uploadQueue.length} · {uploadProgress}%
+              </p>
+            </div>
+            <div className="w-48 h-1.5 bg-v-border rounded-full overflow-hidden">
+              <div className="h-full bg-v-accent rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
             </div>
           </div>
         ) : (
-          /* Idle state */
-          <div className="flex flex-col items-center gap-4 py-8 px-6 pointer-events-none">
-            <div className={`w-14 h-14 rounded-2xl border flex items-center justify-center transition-all duration-300
-              ${isDragging
-                ? 'bg-v-success/15 border-v-success/40 text-v-success'
-                : 'bg-[rgba(255,255,255,0.03)] border-[rgba(255,255,255,0.08)] text-v-t3 group-hover:bg-v-accent/10 group-hover:border-v-accent/30 group-hover:text-v-accent'
-              }`}
-            >
-              {isDragging ? <FileUp size={24} /> : <Upload size={24} />}
+          <div className="flex flex-col items-center gap-3 py-8 pointer-events-none">
+            <div className={`w-10 h-10 rounded-lg border flex items-center justify-center transition-colors
+              ${dragging ? 'border-v-success/30 bg-v-success/10 text-v-success' : 'border-v-border bg-v-surface text-v-t3'}`}>
+              {dragging ? <FileUp size={20} /> : <Upload size={20} />}
             </div>
             <div className="text-center">
-              <p className={`font-semibold text-sm transition-colors duration-200 ${isDragging ? 'text-v-success' : 'text-v-t1 group-hover:text-white'}`}>
-                {isDragging ? 'Déposez pour chiffrer' : 'Glissez-déposez vos fichiers'}
+              <p className={`text-[13px] font-medium ${dragging ? 'text-v-success' : 'text-v-t1'}`}>
+                {dragging ? 'Déposez les fichiers' : 'Glissez-déposez vos fichiers'}
               </p>
-              <p className="text-xs text-v-t3 mt-1">
-                ou <span className="text-v-accent-3 underline underline-offset-2">parcourir</span>
-                {' '}· Multi-fichiers · <span className="font-mono">Max 100MB</span>
+              <p className="text-[12px] text-v-t3 mt-0.5">
+                ou <span className="text-v-accent underline underline-offset-2 cursor-pointer">parcourir</span> · Max 100 MB
               </p>
             </div>
           </div>
         )}
-
-        {/* Bottom badge */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1 rounded-full border border-v-success/20 bg-v-success/8 backdrop-blur-sm pointer-events-none">
-          <ShieldCheck size={11} className="text-v-success" />
-          <span className="text-[10px] font-mono text-v-success uppercase tracking-widest">Protection Active</span>
-        </div>
       </div>
 
-      {/* Upload queue */}
+      {/* Queue */}
       {uploadQueue.length > 0 && (
-        <div className="flex flex-col gap-2 max-h-[180px] overflow-y-auto custom-scroll">
-          {uploadQueue.map((item, index) => {
-            const s = STATUS_MAP[item.status] || STATUS_MAP.waiting;
+        <div className="rounded-lg border border-v-border divide-y divide-v-border overflow-hidden">
+          {uploadQueue.map((item, i) => {
+            const s = STATUS[item.status] || STATUS.waiting;
             return (
-              <div
-                key={index}
-                className="flex items-center gap-3 p-3 rounded-xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)] animate-fade-in"
-              >
-                <div className={`flex-shrink-0 w-7 h-7 rounded-lg border flex items-center justify-center ${s.bg} ${s.border}`}>
-                  <StatusIcon status={item.status} />
-                </div>
+              <div key={i} className="flex items-center gap-3 px-3 py-2.5 bg-v-surface/50">
+                <StatusIcon status={item.status} />
                 <FileIcon size={13} className="text-v-t3 flex-shrink-0" />
-                <span className="flex-1 truncate text-sm text-v-t1 font-medium min-w-0">{item.file.name}</span>
-
-                {/* Progress bar for active states */}
+                <span className="flex-1 truncate text-[12px] text-v-t1 min-w-0">{item.file.name}</span>
                 {(item.status === 'encrypting' || item.status === 'uploading') && (
-                  <div className="w-20 h-1 bg-[rgba(255,255,255,0.05)] rounded-full overflow-hidden flex-shrink-0">
-                    <div
-                      className={`h-full rounded-full transition-all duration-300 ${item.status === 'encrypting' ? 'bg-v-accent' : 'bg-v-info'}`}
-                      style={{ width: `${item.progress}%` }}
-                    />
+                  <div className="w-16 h-1 bg-v-border rounded-full overflow-hidden flex-shrink-0">
+                    <div className={`h-full rounded-full transition-all ${item.status === 'encrypting' ? 'bg-v-accent' : 'bg-v-info'}`}
+                      style={{ width: `${item.progress}%` }} />
                   </div>
                 )}
-
-                <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border flex-shrink-0 ${s.color} ${s.bg} ${s.border}`}>
-                  {s.label}
-                </span>
+                <span className={`text-[10px] font-mono flex-shrink-0 ${s.color}`}>{s.label}</span>
               </div>
             );
           })}
         </div>
       )}
 
-      {/* Info footer */}
-      <div className="flex items-center gap-3 p-3 rounded-xl border border-[rgba(255,255,255,0.05)] bg-[rgba(255,255,255,0.02)]">
+      {/* Notice */}
+      <div className="flex items-center gap-2.5 p-3 rounded-lg border border-v-border bg-v-surface">
         <Lock size={13} className="text-v-t3 flex-shrink-0" />
         <p className="text-[11px] text-v-t3 leading-relaxed">
-          Le chiffrement AES-256-GCM s'effectue localement dans votre RAM avant tout envoi réseau.
-          {' '}<span className="text-v-t2">Le serveur reçoit uniquement des blobs opaques.</span>
+          Le chiffrement s'effectue localement avant tout envoi réseau. Le serveur reçoit uniquement des blobs opaques.
         </p>
       </div>
     </div>
