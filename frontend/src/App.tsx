@@ -9,88 +9,64 @@ function App() {
   if (isAuthenticated) return <Dashboard />;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col lg:flex-row relative overflow-hidden text-foreground selection:bg-primary/20">
+    <div className="h-screen bg-background flex flex-col lg:flex-row relative overflow-hidden text-foreground selection:bg-primary/20 cursor-default">
       
-      {/* Halo Background Light */}
-      <div className="halo-glow top-[-200px] left-[-200px]" />
-      
-      {/* Grid background */}
-      <div className="absolute inset-0 grid-bg opacity-40 z-0" />
+      {/* Background Layer */}
+      <div className="absolute inset-0 grid-dots opacity-40 z-0" />
+      <div className="halo top-[-15%] left-[-10%] w-[50%] h-[50%]" />
+      <div className="halo bottom-[-10%] right-[-5%] w-[40%] h-[40%] opacity-05" />
 
-      {/* Left Column - Hero */}
-      <aside className="relative z-10 w-full lg:w-[55%] xl:w-[58%] flex flex-col justify-between px-8 py-10 sm:px-12 sm:py-16 xl:px-24 xl:py-24 max-w-5xl mx-auto">
+      {/* Absolute Branding Block - Extreme Top Left */}
+      <div className="absolute top-4 left-4 z-50 flex items-center gap-1.5 animate-in">
+        <Logo size={24} className="translate-y-[-0.5px]" />
+        <span className="text-xl font-black italic tracking-[0.1em] text-white/90 select-none leading-none">VEIL</span>
+      </div>
+
+      {/* Hero Section */}
+      <aside className="relative z-10 w-full lg:w-[50%] xl:w-[55%] flex flex-col justify-center px-8 py-8 sm:px-12 sm:py-12 xl:px-20 xl:py-16">
         
-        {/* Top: Logo */}
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-secondary to-card shadow-premium border border-white/5 flex items-center justify-center text-primary">
-            <Logo size={24} />
-          </div>
-          <span className="text-xl font-medium tracking-widest text-foreground uppercase">VEIL</span>
-        </div>
+        {/* Spacer for Absolute Global Branding */}
+        <div className="h-20 mb-8" />
 
-        {/* Center: Hero content */}
-        <div className="flex-1 flex flex-col justify-center gap-10 mt-12 mb-12">
-          
-          {/* Badge */}
-          <div className="flex items-center gap-2 w-fit">
-            <span className="flex items-center gap-2.5 px-4 py-2 rounded-full glass text-[13px] font-semibold tracking-wide text-muted-foreground uppercase border-border/40">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary/80 animate-pulse" />
-              Cryptographic Core Active
-            </span>
-          </div>
+        {/* Content */}
+        <div className="flex-1 flex flex-col justify-center gap-8 max-w-xl">
+          <div className="space-y-6 animate-in" style={{ animationDelay: '0.1s' }}>
 
-          {/* Headline */}
-          <div className="space-y-6 max-w-2xl">
-            <h1 className="text-5xl sm:text-6xl xl:text-7xl font-bold tracking-tight text-white leading-[1.05]">
-              Privé par architecture.<br />
-              Inaccessible par conception.
+            <h1 className="text-4xl sm:text-5xl xl:text-6xl font-black tracking-tight text-white leading-none">
+              Sécurité Absolue.<br />
+              Zéro Compromis.
             </h1>
-            <p className="text-lg sm:text-xl text-muted-foreground font-medium max-w-xl leading-relaxed">
-              Vos données. Vos clés. Notre aveuglement absolu. Aucun serveur ne peut décrypter votre coffre.
+            <p className="text-sm sm:text-base text-muted-foreground/80 font-medium leading-relaxed max-w-md">
+              L'architecture zero-knowledge garantit que <span className="text-white">seul vous</span> possédez les clés de vos données. Aucun serveur, aucun tiers.
             </p>
           </div>
 
-          {/* Trust Signals (Compact Stack) */}
-          <div className="space-y-4 max-w-md pt-8">
-            <div className="flex items-center gap-5 p-5 rounded-2xl glass hover:bg-card/60 transition-colors group">
-              <Lock className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-              <div>
-                <p className="text-[15px] font-semibold text-foreground tracking-wide">Client-side AES-256-GCM</p>
-                <p className="text-[13px] text-muted-foreground mt-0.5">Données chiffrées avant réseau</p>
+          {/* Secure Features */}
+          <div className="grid grid-cols-1 gap-3 animate-in" style={{ animationDelay: '0.2s' }}>
+            {[
+              { icon: Lock, label: 'Chiffrement AES-256-GCM Local', sub: 'Calculé sur votre processeur' },
+              { icon: Shield, label: 'Dérivation Argon2id', sub: 'Clés maîtresse non-extractibles' },
+              { icon: Server, label: 'Trustless Infrastructure', sub: 'Serveurs aveugles par conception' }
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-4 p-4 rounded-xl glass hover:bg-white/[0.03] transition-all group border-white/[0.02]">
+                <item.icon className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                <div>
+                  <p className="text-[13px] font-semibold text-white/90">{item.label}</p>
+                  <p className="text-[11px] text-muted-foreground">{item.sub}</p>
+                </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-5 p-5 rounded-2xl glass hover:bg-card/60 transition-colors group">
-              <Shield className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-              <div>
-                <p className="text-[15px] font-semibold text-foreground tracking-wide">Local Argon2id Derivation</p>
-                <p className="text-[13px] text-muted-foreground mt-0.5">Vos secrets ne quittent jamais l'appareil</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-5 p-5 rounded-2xl glass hover:bg-card/60 transition-colors group">
-              <Server className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-              <div>
-                <p className="text-[15px] font-semibold text-foreground tracking-wide">Zero-Knowledge Trust</p>
-                <p className="text-[13px] text-muted-foreground mt-0.5">Absence totale de contrôle serveur</p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
 
-        {/* Bottom: Footer */}
-        <div className="flex items-center justify-between text-[13px] text-muted-foreground pt-10 border-t border-border/30">
-          <span>© 2026 VEIL Security Systems.</span>
-          <div className="flex gap-6">
-            <a href="#" className="hover:text-foreground transition-colors">Documentation</a>
-            <a href="#" className="hover:text-foreground transition-colors">Architecture</a>
-          </div>
-        </div>
+        <footer className="flex items-center justify-between text-[11px] text-muted-foreground/60 font-medium pt-8 border-t border-white/5 animate-in" style={{ animationDelay: '0.3s' }}>
+          <span>© 2026 VEIL Core</span>
+        </footer>
       </aside>
 
-      {/* Right Column - Auth */}
-      <main className="relative z-10 w-full lg:w-[45%] xl:w-[42%] flex items-center justify-center px-6 py-12 sm:px-12 lg:px-16 border-t lg:border-t-0 lg:border-l border-white/5 min-h-screen lg:min-h-screen bg-black/40 backdrop-blur-3xl">
-        <div className="w-full max-w-[440px]">
+      {/* Auth Panel */}
+      <main className="relative z-10 w-full lg:w-[50%] xl:w-[45%] flex items-center justify-center p-6 lg:border-l border-white/[0.05] bg-black/20 backdrop-blur-2xl">
+        <div className="w-full max-w-[400px]">
           <AuthForm />
         </div>
       </main>

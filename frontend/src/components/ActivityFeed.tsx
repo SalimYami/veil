@@ -28,33 +28,33 @@ export function ActivityFeed() {
 
   if (!activities || activities.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 animate-fadeIn">
-         <div className="w-14 h-14 rounded-2xl bg-card border border-white/[0.04] flex items-center justify-center text-muted-foreground mb-4 shadow-sm">
-            <Activity size={24} strokeWidth={1.5} />
+      <div className="flex flex-col items-center justify-center py-20 animate-in">
+         <div className="w-12 h-12 rounded-xl border border-white/5 bg-white/[0.01] flex items-center justify-center text-muted-foreground/40 mb-4">
+            <Activity size={20} />
          </div>
-         <p className="text-[14px] text-muted-foreground font-medium">No recent operations logged.</p>
+         <p className="text-[12px] text-muted-foreground/50 font-medium">No system activity logged.</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-white/[0.04] bg-card/40 backdrop-blur-sm divide-y divide-white/[0.02] overflow-hidden max-w-4xl shadow-inner animate-fadeIn space-y-[1px]">
-      {activities.slice(0, 25).map((entry, i) => {
+    <div className="rounded-xl border border-white/[0.03] bg-black/20 backdrop-blur-sm divide-y divide-white/[0.02] overflow-hidden shadow-inner animate-in">
+      {activities.slice(0, 20).map((entry, i) => {
         const a = ACTIONS[entry.action] || { icon: Activity, label: entry.action.toUpperCase(), color: 'text-muted-foreground' };
         const Icon = a.icon;
         return (
-          <div key={`${entry.file_id}-${i}`} className="flex items-center gap-4 px-6 py-4 bg-transparent hover:bg-secondary/40 transition-colors">
-            <div className={`p-2 rounded-lg bg-secondary/80 ${a.color} shadow-sm border border-white/[0.02]`}>
-               <Icon size={16} />
+          <div key={`${entry.file_id}-${i}`} className="flex items-center gap-3 px-5 py-3 bg-transparent hover:bg-white/[0.02] transition-colors">
+            <div className={`p-1.5 rounded bg-white/[0.02] ${a.color} border border-white/5`}>
+               <Icon size={14} />
             </div>
             <div className="flex-1 min-w-0 pr-4">
-              <p className="text-[14px] font-semibold text-foreground truncate">{entry.file_name}</p>
-              {entry.details && <p className="text-[12px] text-muted-foreground mt-0.5 truncate">{entry.details}</p>}
+              <p className="text-[12px] font-semibold text-white/90 truncate">{entry.file_name}</p>
+              {entry.details && <p className="text-[10px] text-muted-foreground/50 tracking-wide mt-0.5 truncate uppercase font-bold">{entry.details}</p>}
             </div>
-            <span className={`text-[11px] font-bold tracking-widest flex-shrink-0 bg-background/50 px-2.5 py-1 rounded-md border border-white/[0.02] ${a.color}`}>
+            <span className={`text-[9px] font-black tracking-[0.15em] flex-shrink-0 bg-black/40 px-2 py-0.5 rounded border border-white/[0.05] ${a.color}`}>
               {a.label}
             </span>
-            <span className="text-[12px] text-muted-foreground flex-shrink-0 w-24 text-right font-medium opacity-80">
+            <span className="text-[10px] text-muted-foreground/40 flex-shrink-0 w-20 text-right font-bold opacity-80">
               {timeAgo(entry.timestamp)}
             </span>
           </div>

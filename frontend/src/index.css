@@ -1,180 +1,147 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=IBM+Plex+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
+@config "../tailwind.config.ts";
 
 /* ================================================================
-   VEIL — Ultra Premium Design System (Midnight Navy)
+   VEIL — Zero-Scroll Obsidian Edition (Pro-Grade)
    ================================================================ */
 
 @layer base {
   :root {
-    /* Background: Deep Midnight Navy/Black */
-    --background: 224 50% 2%; 
-    --foreground: 210 40% 98%;
+    /* Background: True Obsidian / Deep Charcoal */
+    --background: 240 10% 2%; 
+    --foreground: 0 0% 98%;
     
-    /* Card: Slightly elevated dark panel */
-    --card: 224 45% 4%;
-    --card-foreground: 210 40% 98%;
+    /* Card: Sleek semi-transparent dark */
+    --card: 240 5% 4%;
+    --card-foreground: 0 0% 98%;
     
-    /* Primary: Cold electric blue / Indigo */
-    --primary: 217 91% 60%;
+    /* Primary: Sharp Electric Blue */
+    --primary: 212 90% 55%;
     --primary-foreground: 0 0% 100%;
     
-    /* Secondary: Deep muted surface */
-    --secondary: 224 40% 7%;
-    --secondary-foreground: 210 20% 85%;
+    /* Secondary: Deep muted charcoal */
+    --secondary: 240 4% 8%;
+    --secondary-foreground: 240 5% 85%;
     
-    /* Muted: Subtle texts */
-    --muted: 224 30% 10%;
-    --muted-foreground: 215 20% 60%;
+    /* Muted: Subtle typography */
+    --muted: 240 5% 10%;
+    --muted-foreground: 240 4% 55%;
     
-    /* Accent: For highlight borders/items */
-    --accent: 217 91% 60%;
+    /* Accent: Precision focus */
+    --accent: 212 90% 55%;
     --accent-foreground: 0 0% 100%;
     
-    /* Destructive: Muted red */
-    --destructive: 350 70% 50%;
+    --destructive: 0 70% 50%;
     --destructive-foreground: 0 0% 100%;
     
-    /* Borders: Ultra thin, barely visible */
-    --border: 224 30% 10%; 
-    --input: 224 35% 6%;
-    --ring: 217 91% 60%;
+    /* Borders: Ultra-thin high-precision */
+    --border: 240 5% 12%; 
+    --input: 240 5% 6%;
+    --ring: 212 90% 55%;
     
-    --radius: 12px;
+    --radius: 8px; /* Sharper corners for a pro look */
     
     --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-    --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    --font-mono: 'IBM Plex Mono', 'SF Mono', Monaco, monospace;
   }
 
   * {
-    @apply border-border;
+    border-color: hsl(var(--border) / 0.5);
   }
 
-  html {
-    @apply scroll-smooth;
+  html, body, #root {
+    height: 100%;
+    overflow: hidden; /* Force Zero-Scroll at document level */
+    @apply antialiased select-none;
   }
 
   body {
-    @apply bg-background text-foreground antialiased;
-    font-feature-settings: "rounding-mode" 0;
+    @apply bg-background text-foreground text-[14px];
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
   }
 }
 
 @layer components {
-  /* Premium Inputs */
+  /* Ultra-Lean Inputs */
   .input-base {
-    @apply w-full bg-input border border-border/80 rounded-xl px-4 py-3
-           text-foreground text-[15px] placeholder:text-muted-foreground
-           transition-all duration-300 focus:outline-none focus:border-primary/50
-           focus:ring-1 focus:ring-primary/50 focus:bg-background shadow-inner
-           disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply w-full bg-input border border-white/5 rounded-md px-3 py-2
+           text-foreground text-[12px] placeholder:text-muted-foreground/40
+           transition-all duration-200 focus:outline-none focus:border-primary/40
+           focus:ring-1 focus:ring-primary/20 focus:bg-background/50
+           disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/[0.02];
   }
 
-  /* Premium Buttons */
+  /* Compact Buttons */
   .btn-primary {
-    @apply bg-primary text-primary-foreground px-8 py-3 rounded-xl font-medium text-[15px]
-           shadow-[0_0_20px_rgba(59,130,246,0.15)]
-           transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_25px_rgba(59,130,246,0.25)]
-           active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply bg-primary text-primary-foreground px-4 py-1.5 rounded-md font-medium text-[12px] tracking-tight
+           shadow-[0_1px_2px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)]
+           transition-all duration-200 hover:bg-primary/90 hover:shadow-lg
+           active:scale-[0.97] disabled:opacity-50;
   }
 
   .btn-secondary {
-    @apply bg-secondary text-secondary-foreground px-8 py-3 rounded-xl font-medium text-[15px]
-           border border-border/50 transition-all duration-300 hover:bg-secondary/80 hover:border-border
-           active:scale-[0.98] disabled:opacity-50;
+    @apply bg-secondary text-secondary-foreground px-4 py-1.5 rounded-md font-medium text-[12px] tracking-tight
+           border border-white/5 shadow-sm transition-all duration-200 hover:bg-secondary/70
+           active:scale-[0.97] disabled:opacity-50;
   }
 
   .btn-ghost {
-    @apply text-muted-foreground px-6 py-3 rounded-xl font-medium text-[15px]
-           transition-all duration-300 hover:text-foreground hover:bg-secondary/50
-           active:scale-[0.98] disabled:opacity-50;
+    @apply text-muted-foreground px-3 py-1.5 rounded-md font-medium text-[12px]
+           transition-all duration-200 hover:text-foreground hover:bg-white/[0.03]
+           active:scale-[0.97];
   }
 
-  /* Core Card Object */
+  /* Precise Card */
   .card {
-    @apply bg-card text-card-foreground rounded-[20px] border border-border/50 overflow-hidden relative;
+    @apply bg-card/60 backdrop-blur-md text-card-foreground rounded-xl border border-white/[0.06] overflow-hidden
+           transition-shadow duration-300;
   }
 
-  /* Badges */
+  /* Micro Badges */
   .badge {
-    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase
-           bg-secondary/80 border border-border/60 text-muted-foreground;
+    @apply inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold tracking-tighter uppercase
+           bg-secondary/50 border border-white/[0.05] text-muted-foreground transition-colors;
   }
 }
 
 @layer utilities {
-  /* Scrollbar styling */
-  ::-webkit-scrollbar {
-    @apply w-1.5 h-1.5;
-  }
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full hover:bg-muted-foreground/30 transition-colors;
-  }
-
-  /* Typography utilities */
-  .text-balance {
-    text-wrap: balance;
-  }
-
-  /* Refined Glass & Halos */
   .glass {
-    @apply bg-card/40 backdrop-blur-xl border border-white/[0.04];
+    @apply bg-white/[0.01] backdrop-blur-2xl border border-white/[0.03] shadow-inner;
   }
 
-  /* Luxury Shadows */
-  .shadow-premium {
-    box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  .shadow-pro {
+    box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
-  .shadow-premium-lg {
-    box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }
 
-/* Animations */
-@keyframes slideUpFade {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes fadeInSlow {
-  from { opacity: 0; }
-  to { opacity: 1; }
+/* Base Animations (Simplified for pro feel) */
+@keyframes microSlideUp {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @layer utilities {
-  .animate-slideUp {
-    animation: slideUpFade 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  }
-  .animate-fadeIn {
-    animation: fadeInSlow 0.6s ease-out forwards;
+  .animate-in {
+    animation: microSlideUp 0.3s cubic-bezier(0.1, 1, 0.1, 1) forwards;
   }
 }
 
-/* Atmospheric Background */
-.grid-bg {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-  background-size: 50px 50px;
-  mask-image: radial-gradient(circle at center, black, transparent 80%);
+/* Grid & FX */
+.grid-dots {
+  background-image: radial-gradient(circle at center, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
-.halo-glow {
+.halo {
   position: absolute;
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, var(--primary) 0%, transparent 60%);
-  opacity: 0.04;
   pointer-events: none;
-  filter: blur(80px);
+  background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
+  filter: blur(120px);
+  opacity: 0.1;
+  mix-blend-mode: plus-lighter;
 }
