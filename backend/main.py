@@ -24,7 +24,6 @@ Le serveur ne voit JAMAIS les données en clair !
 =============================================================================
 """
 
-import os
 import uuid
 import hmac
 import hashlib
