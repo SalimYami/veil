@@ -172,6 +172,7 @@ jobs:
           VEIL_SECRET_KEY=ci-secret-key-that-is-now-32char-long
           VEIL_REFRESH_SECRET_KEY=ci-refresh-secret-key-now-32char!
           VEIL_ADMIN_KEY=ci-admin-key-long-enough
+          SALT_HMAC_SECRET=ci-salt-hmac-secret-that-is-32char-long-min
           VEIL_ALLOWED_ORIGINS=http://localhost,http://127.0.0.1
           MAX_FILE_SIZE=104857600
           EOF
