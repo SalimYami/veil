@@ -169,9 +169,9 @@ jobs:
           MINIO_REGION=us-east-1
           MINIO_BUCKET=veil-storage
           MINIO_EXTERNAL_ENDPOINT=http://127.0.0.1:9999
-          VEIL_SECRET_KEY=ci-secret-key-change-in-prod
-          VEIL_REFRESH_SECRET_KEY=ci-refresh-secret-key
-          VEIL_ADMIN_KEY=ci-admin-key
+          VEIL_SECRET_KEY=ci-secret-key-that-is-now-32char-long
+          VEIL_REFRESH_SECRET_KEY=ci-refresh-secret-key-now-32char!
+          VEIL_ADMIN_KEY=ci-admin-key-long-enough
           VEIL_ALLOWED_ORIGINS=http://localhost,http://127.0.0.1
           MAX_FILE_SIZE=104857600
           EOF

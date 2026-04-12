@@ -143,8 +143,8 @@ services:
     ports:
       - "5173:5173"
     volumes:
-      - ./frontend/src:/app/src # Hot-reload source files
-      - /app/node_modules # Don't mount node_modules
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
     restart: unless-stopped

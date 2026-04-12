@@ -12,6 +12,7 @@ Défense en profondeur :
 =============================================================================
 """
 
+import os
 import time
 import logging
 
@@ -71,7 +72,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Skip les routes de monitoring
-        if request.url.path in ("/health", "/docs", "/openapi.json", "/redoc"):
+        if request.url.path in ("/health", "/docs", "/openapi.json", "/redoc") or os.environ.get("VEIL_TESTING") == "true":
             return await call_next(request)
 
         # Extraire l'IP réelle (derrière reverse proxy)

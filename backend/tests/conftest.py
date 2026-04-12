@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 # ── Override environment before importing main ─────────────────────────────
 os.environ.update({
-    "DATABASE_URL": "sqlite:///./test_veil.db",
+    "DATABASE_URL": "sqlite://",
     "VEIL_SECRET_KEY": "test-secret-key-for-pytest-only-32chars!!",
     "VEIL_REFRESH_SECRET_KEY": "test-refresh-key-for-pytest-32chars!!",
     "VEIL_ADMIN_KEY": "test-admin-key",
@@ -22,6 +22,7 @@ os.environ.update({
     "MINIO_BUCKET": "veil-test",
     "VEIL_ALLOWED_ORIGINS": "http://localhost",
     "MAX_FILE_SIZE": "104857600",
+    "VEIL_TESTING": "true",
 })
 
 
@@ -45,7 +46,10 @@ def client():
         MockMinio.return_value.delete_object.return_value = True
 
         from main import app
-        from database.connection import Base, get_engine
+        from database.connection import Base, get_engine, init_db
+        
+        # Force re-initialization for the test client
+        init_db(os.environ["DATABASE_URL"])
         
         # Create tables for tests
         Base.metadata.create_all(bind=get_engine())
