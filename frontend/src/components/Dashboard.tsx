@@ -269,13 +269,13 @@ export function Dashboard() {
              <span className="text-[10px] font-bold text-primary px-1.5 py-0.5 rounded bg-primary/10">{uploadQueue.length} items</span>
           </div>
           <div className="space-y-3">
-            {uploadQueue.map((file) => (
-              <div key={file.id} className="space-y-1.5">
-                <p className="text-[11px] text-muted-foreground truncate font-medium">{file.name}</p>
+            {uploadQueue.map((item, index) => (
+              <div key={`${item.file.name}-${index}`} className="space-y-1.5">
+                <p className="text-[11px] text-muted-foreground truncate font-medium">{item.file.name}</p>
                 <div className="w-full h-1 bg-white/5 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary transition-all duration-300"
-                    style={{ width: `${file.progress}%` }}
+                    style={{ width: `${item.progress}%` }}
                   />
                 </div>
               </div>
