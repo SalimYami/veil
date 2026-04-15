@@ -75,13 +75,9 @@ jobs:
 
     steps:
       - name: Trigger Render Deploy (Backend)
-        env:
-          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}
-        if: env.HOOK != ''
-        run: curl -X POST "$HOOK"
+        if: ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND != '' }}
+        run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}"
 
       - name: Trigger Render Deploy (Frontend)
-        env:
-          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}
-        if: env.HOOK != ''
-        run: curl -X POST "$HOOK"
+        if: ${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND != '' }}
+        run: curl -X POST "${{ secrets.RENDER_DEPLOY_HOOK_FRONTEND }}"
