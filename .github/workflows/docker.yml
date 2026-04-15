@@ -8,8 +8,6 @@ on:
 
 env:
   REGISTRY: docker.io
-  BACKEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/veil-backend
-  FRONTEND_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/veil-frontend
 
 jobs:
   build-push:
@@ -32,7 +30,7 @@ jobs:
         id: meta-backend
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.BACKEND_IMAGE }}
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/veil-backend
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -43,7 +41,7 @@ jobs:
         id: meta-frontend
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.FRONTEND_IMAGE }}
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/veil-frontend
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
