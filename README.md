@@ -213,18 +213,32 @@ ansible-playbook ansible/playbook-local.yml -i ansible/inventory.ini -K
 
 ---
 
-## 🌍 Free Deployments
+## 🌍 Production Deployments (The Best Approach)
 
-| Platform | URL | Stack |
-|----------|-----|-------|
-| **Render.com** | `https://veil-api.onrender.com` | FastAPI + PostgreSQL (free tier) |
-| **Netlify** | `https://veil-app.netlify.app` | React frontend |
-| **Vercel** | `https://veil.vercel.app` | React frontend |
-| **ngrok** | `https://xxx.ngrok.io` | Local tunnel (all services) |
+For the absolute best performance and developer experience, we deploy **VEIL** using a split architecture:
 
-### Deploy to Render (1-click)
+| Platform | Role | URL | Stack |
+|----------|---------|-----|-------|
+| **Vercel** | Frontend | `https://veil-lac.vercel.app` | React 19 + Vite + WASM |
+| **Render.com** | Backend | `https://veil-api.onrender.com` | FastAPI + PostgreSQL |
+
+### Deploy Frontend to Vercel (CI/CD)
+
+The repository includes an automatic GitHub Actions workflow (`deploy-frontend.yml`) for Vercel deployments. 
+To enable it, add the following **Repository Secrets** in GitHub (`Settings > Secrets and variables > Actions`):
+- `VERCEL_TOKEN`: Generate this from your Vercel account settings.
+- `VERCEL_ORG_ID`: Your Vercel scope/organization ID.
+- `VERCEL_PROJECT_ID`: The ID of your Vercel project.
+
+> **Note:** The included `vercel.json` automatically handles single-page application (SPA) routing.
+
+### Deploy Backend to Render (1-click)
+
+The API is fully automated via `render.yaml`. Use the blueprint or deploy manually:
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/SalimYami/veil)
+
+*Make sure to configure all the required Environment Variables in the Render dashboard after deployment.*
 
 ---
 
