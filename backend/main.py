@@ -756,6 +756,24 @@ async def download_file(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@app.get(
+    "/api/files/{file_id}/preview",
+    tags=["Files"]
+)
+async def get_file_preview(
+    file_id: str,
+    user: dict = Depends(get_current_user)
+):
+    """
+    Get file ciphertext preview and metadata.
+    """
+    try:
+        result = file_service.get_file_preview(user["id"], file_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @app.delete(
     "/api/files/{file_id}",
     tags=["Files"]
@@ -858,15 +876,17 @@ async def list_users(admin: dict = Depends(get_admin_user)):
     """List all users (admin only)."""
     with get_db() as db:
         users = db.query(User).all()
-        return [
-            {
-                "id": str(u.id),
-                "email": u.email,
-                "role": u.role,
-                "created_at": u.created_at.isoformat()
-            }
-            for u in users
-        ]
+        return {
+            "users": [
+                {
+                    "id": str(u.id),
+                    "email": u.email,
+                    "role": u.role,
+                    "created_at": u.created_at.isoformat()
+                }
+                for u in users
+            ]
+        }
 
 
 @app.get(
@@ -885,6 +905,27 @@ async def admin_stats(admin: dict = Depends(get_admin_user)):
             "total_files": total_files,
             "total_size_bytes": total_size,
             "total_size_mb": round(total_size / (1024 * 1024), 2)
+        }
+
+
+@app.get(
+    "/api/admin/storage",
+    tags=["Admin"]
+)
+async def admin_storage(admin: dict = Depends(get_admin_user)):
+    """List all uploaded files (admin only)."""
+    with get_db() as db:
+        files = db.query(File).filter(File.status == "uploaded").all()
+        return {
+            "entries": [
+                {
+                    "id": str(f.id),
+                    "hash": hashlib.sha256(f.object_key.encode()).hexdigest(),
+                    "size": f.file_size,
+                    "created_at": f.created_at.isoformat()
+                }
+                for f in files
+            ]
         }
 
 

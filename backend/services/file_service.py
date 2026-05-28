@@ -316,3 +316,47 @@ class FileService:
             
             logger.info(f"File tags updated: {file_meta.file_name} -> {tags}")
             return True
+
+    def get_file_preview(self, user_id: str, file_id: str) -> dict:
+        """
+        Generate file preview (download from MinIO, compute SHA-256 and read first 256 bytes).
+        """
+        import hashlib
+        with get_db() as db:
+            # Get file metadata
+            file_meta = FileRepository.get_file_by_id(db, file_id)
+            if not file_meta:
+                raise ValueError("File not found")
+            
+            # Verify ownership
+            if str(file_meta.user_id) != str(user_id):
+                raise ValueError("File does not belong to user")
+            
+            # Verify file is uploaded
+            if file_meta.status != "uploaded":
+                raise ValueError("File upload not confirmed")
+            
+            # Download file from MinIO
+            try:
+                response = self.minio_client.client.get_object(self.bucket_name, file_meta.object_key)
+                try:
+                    data = response.read()
+                finally:
+                    response.close()
+                    response.release_conn()
+            except Exception as e:
+                logger.error(f"Failed to read file from MinIO: {str(e)}")
+                raise ValueError("Failed to retrieve file from storage")
+            
+            sha256_hash = hashlib.sha256(data).hexdigest()
+            preview_hex = data[:256].hex()
+            
+            return {
+                "file_id": str(file_meta.id),
+                "file_name": file_meta.file_name,
+                "size_bytes": file_meta.file_size,
+                "sha256_hash": sha256_hash,
+                "preview_hex": preview_hex,
+                "preview_length": len(data[:256]),
+                "message": "Ciphertext preview loaded successfully"
+            }

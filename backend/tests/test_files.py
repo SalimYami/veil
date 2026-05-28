@@ -182,3 +182,78 @@ def test_get_activity(authorized_client):
     response = authorized_client.get("/api/activity")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+def test_get_file_preview(authorized_client, mock_minio):
+    # Confirm a file first
+    init_resp = authorized_client.post(
+        "/api/files/upload-init",
+        json={
+            "file_name": "preview_test.txt",
+            "file_size": 1024,
+            "iv": "1234567890123456",
+            "auth_tag": "1234567890123456"
+        }
+    )
+    file_id = init_resp.json()["file_id"]
+    mock_minio.object_exists.return_value = True
+    authorized_client.post("/api/files/upload-confirm", json={"file_id": file_id})
+    
+    # Mock minio download stream
+    import io
+    mock_stream = io.BytesIO(b"Encrypted content simulation for preview test.")
+    mock_stream.release_conn = lambda: None
+    mock_minio.client.get_object.return_value = mock_stream
+    
+    response = authorized_client.get(f"/api/files/{file_id}/preview")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["file_id"] == file_id
+    assert "sha256_hash" in data
+    assert "preview_hex" in data
+    assert data["preview_hex"] == b"Encrypted content simulation for preview test.".hex()
+
+def test_admin_endpoints(authorized_client, mock_minio):
+    # Regular user should be forbidden
+    storage_resp = authorized_client.get("/api/admin/storage")
+    assert storage_resp.status_code == 403
+
+    users_resp = authorized_client.get("/api/admin/users")
+    assert users_resp.status_code == 403
+
+    # Promote to admin
+    promote_resp = authorized_client.post(
+        "/api/auth/promote-admin",
+        json={"secret_key": "test-admin-key"}
+    )
+    assert promote_resp.status_code == 200
+    assert promote_resp.json()["role"] == "admin"
+
+    # Now as admin, check users endpoint structure
+    users_resp = authorized_client.get("/api/admin/users")
+    assert users_resp.status_code == 200
+    users_data = users_resp.json()
+    assert "users" in users_data
+    assert isinstance(users_data["users"], list)
+    assert any(u["role"] == "admin" for u in users_data["users"])
+
+    # Confirm a file first
+    init_resp = authorized_client.post(
+        "/api/files/upload-init",
+        json={
+            "file_name": "admin_test.txt",
+            "file_size": 100,
+            "iv": "1234567890123456",
+            "auth_tag": "1234567890123456"
+        }
+    )
+    file_id = init_resp.json()["file_id"]
+    mock_minio.object_exists.return_value = True
+    authorized_client.post("/api/files/upload-confirm", json={"file_id": file_id})
+
+    # Now check storage endpoint
+    storage_resp = authorized_client.get("/api/admin/storage")
+    assert storage_resp.status_code == 200
+    storage_data = storage_resp.json()
+    assert "entries" in storage_data
+    assert isinstance(storage_data["entries"], list)
+    assert any(e["id"] == file_id for e in storage_data["entries"])
