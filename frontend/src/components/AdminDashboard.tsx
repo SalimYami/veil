@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAuthStore } from '../store/authStore';
 import { Logo } from './Logo';
 import {
@@ -15,21 +15,21 @@ export function AdminDashboard({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true);
   const API = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const h = { Authorization: `Bearer ${token}` };
       const [u, s] = await Promise.all([
-        fetch(`${API}/admin/users`, { headers: h }).then(r => r.json()),
-        fetch(`${API}/admin/storage`, { headers: h }).then(r => r.json()),
+        fetch(`${API}/api/admin/users`, { headers: h }).then(r => r.json()),
+        fetch(`${API}/api/admin/storage`, { headers: h }).then(r => r.json()),
       ]);
       setUsers(u.users || []);
       setStorage(s.entries || []);
     } catch { /* silent */ }
     finally { setLoading(false); }
-  };
+  }, [token, API]);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   const totalSize = storage.reduce((a, s) => a + s.size, 0);
   const formatMB = (b: number) => (b / 1024 / 1024).toFixed(1);
