@@ -38,7 +38,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://veil:veil_test@localhost:5432/veil_test
-      VEIL_SECRET_KEY: test-secret-key-for-ci-only
+      VEIL_SECRET_KEY: test-secret-key-for-ci-only-32chars!!
       VEIL_REFRESH_SECRET_KEY: test-refresh-secret-key-for-ci-only
       VEIL_ADMIN_KEY: test-admin-key-for-ci
       MINIO_ENDPOINT: localhost:9000
@@ -47,6 +47,7 @@ jobs:
       MINIO_BUCKET: veil-test
       MINIO_EXTERNAL_ENDPOINT: http://localhost:9000
       VEIL_ALLOWED_ORIGINS: http://localhost,http://localhost:5173
+      SALT_HMAC_SECRET: test-salt-hmac-secret-for-ci-only-32chars!!
 
     steps:
       - uses: actions/checkout@v4

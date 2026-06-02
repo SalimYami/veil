@@ -51,7 +51,11 @@ class Settings(BaseSettings):
     MAX_FILES_PER_USER: int = 1000
     VEIL_ALLOWED_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173"
 
-    model_config = {"env_file": ".env", "case_sensitive": True}
+    model_config = {
+        "env_file": ".env",
+        "case_sensitive": True,
+        "extra": "ignore"
+    }
 
 
 # Instanciation immédiate — crash ici si .env incomplet
